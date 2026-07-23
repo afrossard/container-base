@@ -21,7 +21,11 @@ The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codeb
 ├── docs/adr/
 │   ├── 0001-repo-holds-shared-container-images-only.md
 │   ├── 0002-shell-dotfiles-layer-is-dev-only.md
-│   └── 0003-two-axis-tag-matrix.md
+│   ├── 0003-two-axis-tag-matrix.md            ← partly superseded by 0004
+│   ├── 0004-one-dev-image-and-an-asymmetric-tag-scheme.md
+│   ├── 0005-debian-slim-plus-the-common-utils-feature.md
+│   ├── 0006-language-managers-not-baked-runtimes.md
+│   └── 0007-the-dev-image-declares-no-entrypoint.md
 └── ...
 ```
 
