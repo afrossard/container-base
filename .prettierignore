@@ -1,0 +1,9 @@
+# Vendored upstream skills, pinned by content hash in skills-lock.json.
+# Reformatting them would invalidate those hashes on the next skill update.
+.agents/
+.claude/
+
+# Auto-generated
+CHANGELOG.md
+uv.lock
+node_modules/

@@ -1,0 +1,19 @@
+{
+  "name": "container-base",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tooling-only manifest: prettier formatting for this repo's Markdown, JSON and YAML. No runtime JavaScript.",
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.1.1",
+    "prettier": "^3.9.6"
+  },
+  "lint-staged": {
+    "*.{md,json,jsonc,yaml,yml,html}": "prettier --write"
+  }
+}

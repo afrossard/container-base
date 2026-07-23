@@ -1,0 +1,17 @@
+# Ignore macOS temporary files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Ignore Windows temporary files
+Thumbs.db
+Desktop.ini
+
+# Node.js (prettier toolchain only)
+node_modules/
+
+# Claude Code — keep skills & shared settings, ignore local overrides
+.claude/settings.local.json
+
+# Project ignores
+tmp
