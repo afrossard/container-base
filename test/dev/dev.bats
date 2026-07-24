@@ -101,3 +101,44 @@ setup_file() {
   run docker run --rm --user vscode "$IMAGE" zsh -lc 'uv python install 3.13'
   [ "$status" -eq 0 ]
 }
+
+@test "brew resolves in a non-interactive login shell" {
+  run docker run --rm --user vscode "$IMAGE" zsh -lc 'command -v brew'
+  [ "$status" -eq 0 ]
+  [ "$output" = "/home/linuxbrew/.linuxbrew/bin/brew" ]
+}
+
+@test "the Homebrew prefix is vscode-owned" {
+  run docker run --rm "$IMAGE" stat -c '%U:%G' /home/linuxbrew/.linuxbrew
+  [ "$status" -eq 0 ]
+  [ "$output" = "vscode:vscode" ]
+}
+
+@test "starship resolves on PATH" {
+  run docker run --rm --user vscode "$IMAGE" zsh -lc 'command -v starship'
+  [ "$status" -eq 0 ]
+  [ "$output" = "/home/linuxbrew/.linuxbrew/bin/starship" ]
+}
+
+# Scoped to actual shell configuration, not /home/linuxbrew: the Cellar's own
+# bundled docs and completions mention "starship init" as documentation, and
+# that's not this image's concern. What matters is that no shell
+# configuration file evaluates it (ADR-0010).
+@test "no starship init line is written into any shell configuration" {
+  run docker run --rm "$IMAGE" sh -c 'grep -rl "starship init" /etc/zsh /etc/profile.d /home/vscode 2>/dev/null'
+  [ "$status" -ne 0 ]
+  [ -z "$output" ]
+}
+
+@test "\$HOME carries no Homebrew or starship file" {
+  run docker run --rm "$IMAGE" sh -c '[ ! -e /home/vscode/.cache/Homebrew ] && [ ! -e /home/vscode/.config/starship.toml ]'
+  [ "$status" -eq 0 ]
+}
+
+# Homebrew and starship wiring only ever appends to /etc/zsh/zshenv (above);
+# this asserts /etc/zsh/zshrc carries none of it, i.e. it's left exactly as
+# whatever wrote it before this layer ran (Debian's zsh package).
+@test "/etc/zsh/zshrc carries no Homebrew or starship configuration" {
+  run docker run --rm "$IMAGE" sh -c 'grep -iE "brew|starship" /etc/zsh/zshrc'
+  [ "$status" -ne 0 ]
+}

@@ -16,9 +16,15 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.32 /uv /uvx /bin/
 # leaves this layer's edits alone.
 ENV MISE_DATA_DIR=/usr/local/share/mise
 
+# ca-certificates, curl and git are runtime requirements of the Homebrew
+# installer below, not of mise; they're installed in this same layer to
+# share one apt-get update/install with the rest of the base tooling.
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
         extrepo \
+        git \
         sudo \
         zsh \
     && extrepo enable mise \
@@ -40,3 +46,29 @@ RUN sed -i \
     && shims_line="export PATH=\"${MISE_DATA_DIR}/shims:\$PATH\"" \
     && printf '\n# mise shims (ADR-0008)\n%s\n' "$shims_line" >> /etc/zsh/zshenv \
     && printf '# mise shims (ADR-0008)\n%s\n' "$shims_line" > /etc/profile.d/mise-shims.sh
+
+# Homebrew, for parity with the Mac. Its installer refuses to run as root
+# unless it detects a container; that check looks for /.dockerenv,
+# which classic `docker run` sets up but a BuildKit `RUN` step does not, so
+# it is created and removed around the install. The prefix is chowned to
+# the eventual vscode uid/gid afterward, same as mise's data directory
+# above, so `brew install` needs no sudo once the common-utils feature
+# creates that user. shellenv goes in /etc/zsh/zshenv, never a file under
+# $HOME, so non-interactive shells get it too (ADR-0010).
+ENV HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
+ENV HOMEBREW_NO_ANALYTICS=1
+ENV NONINTERACTIVE=1
+
+RUN touch /.dockerenv \
+    && /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
+    && "$HOMEBREW_PREFIX/bin/brew" install starship \
+    && chown -R 1000:1000 "$HOMEBREW_PREFIX" \
+    && rm -f /.dockerenv \
+    && rm -rf /root/.cache/Homebrew \
+    && printf '\n# Homebrew shellenv (ADR-0010)\n%s\n' \
+        "$("$HOMEBREW_PREFIX/bin/brew" shellenv)" >> /etc/zsh/zshenv
+
+# The starship binary ships, but shell ergonomics are a personal-dotfiles
+# concern (ADR-0010): no `starship init` line is written anywhere in the
+# image, so a developer without dotfiles gets the binary on PATH and the
+# default shell prompt.

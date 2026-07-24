@@ -7,7 +7,9 @@ CI (`.github/workflows/dev-image.yml`) builds it with `--frozen-lockfile` and ru
 Published multi-arch to GHCR on a git tag (issue #3, `.github/workflows/publish-dev-image.yml`).
 `uv` and `mise` are wired in system-wide (issue #4): `uv` via `COPY --from=ghcr.io/astral-sh/uv`, `mise` via its apt repository, `mise`'s data directory moved to `/usr/local/share/mise` and vscode-owned, shims on `PATH` and prepended to sudo's `secure_path`.
 Neither installer touches `$HOME`.
-The dev layer (Homebrew, chezmoi, starship), the remaining tools (`gh`, `dive`, `vim`, `bubblewrap`, Claude Code), and `dotfiles-bootstrap` have not landed yet (issues #5 through #8).
+Homebrew and starship are wired in system-wide (issue #5): Homebrew's installer runs as root during the build (its own container check needs a faked `/.dockerenv`, since BuildKit `RUN` steps don't set one up), the prefix at `/home/linuxbrew/.linuxbrew` is chowned to the eventual vscode uid/gid, and `brew shellenv`'s output is appended to `/etc/zsh/zshenv`.
+`starship` ships on `PATH` with no `starship init` line anywhere, so shell ergonomics stay a personal-dotfiles concern (ADR-0010).
+Chezmoi, the remaining tools (`gh`, `dive`, `vim`, `bubblewrap`, Claude Code), and `dotfiles-bootstrap` have not landed yet (issues #6 through #8).
 
 ## Known consumers pending migration
 
