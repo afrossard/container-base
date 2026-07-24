@@ -32,7 +32,12 @@ setup_file() {
   [ -n "$output" ]
 }
 
-@test "\$HOME has no chezmoi-managed file after build" {
+# Named after issue #1's literal spec text ("no chezmoi-managed file"), but
+# chezmoi isn't installed yet (lands in #5/#6) and never runs at build time,
+# so there's nothing to ask chezmoi about. This checks the two files
+# installOhMyZsh/installOhMyZshConfig in devcontainer.json exist to prevent:
+# oh-my-zsh's installer writes ~/.zshrc and ~/.oh-my-zsh if either flips on.
+@test "\$HOME carries no oh-my-zsh config file or install directory" {
   run docker run --rm "$IMAGE" sh -c '[ ! -e /home/vscode/.zshrc ] && [ ! -e /home/vscode/.oh-my-zsh ]'
   [ "$status" -eq 0 ]
 }
