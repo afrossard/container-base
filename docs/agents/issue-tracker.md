@@ -27,6 +27,11 @@ When set to `yes`, PRs run through the same labels and states as issues, using t
 GitHub shares one number space across issues and PRs, so a bare `#42` may be either.
 Resolve with `gh pr view 42` and fall back to `gh issue view 42`.
 
+## Merging a PR
+
+`gh pr merge <number> --squash --delete-branch` - squash merge, then delete both the remote and local branch.
+Confirmed preference as of 2026-07-24, superseding the merge-commit history visible on earlier PRs (#10, #11).
+
 ## When a skill says "publish to the issue tracker"
 
 Create a GitHub issue.
