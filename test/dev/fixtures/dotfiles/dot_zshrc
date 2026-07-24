@@ -1,0 +1,4 @@
+# Fixture dotfiles for the dotfiles-bootstrap test suite (issue #6). Never
+# a personal repository: asserting against one developer's configuration
+# would bake it into the definition of a working image.
+export DOTFILES_BOOTSTRAP_FIXTURE=v1

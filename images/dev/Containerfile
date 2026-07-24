@@ -72,3 +72,15 @@ RUN touch /.dockerenv \
 # concern (ADR-0010): no `starship init` line is written anywhere in the
 # image, so a developer without dotfiles gets the binary on PATH and the
 # default shell prompt.
+
+# chezmoi installed system-wide at /usr/local/bin (ADR-0005, ADR-0009): its
+# generated installer targets ~/.local when chezmoi is not already on PATH,
+# which creates ~/.local, which chezmoi then prompts about with no TTY.
+# -b overrides that default so the trap never has a chance to trigger.
+RUN curl -fsSL get.chezmoi.io | sh -s -- -b /usr/local/bin
+
+# dotfiles-bootstrap is the one thing every consumer calls (ADR-0007): it
+# takes the dotfiles repository from the environment and never bakes one
+# in, since a shared image carries no one's configuration (ADR-0001).
+COPY dotfiles-bootstrap /usr/local/bin/dotfiles-bootstrap
+RUN chmod 0755 /usr/local/bin/dotfiles-bootstrap
