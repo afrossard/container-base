@@ -89,7 +89,8 @@ RUN chmod 0755 /usr/local/bin/dotfiles-bootstrap
 # #7): gh, vim and bubblewrap all ship in Debian's own repository. gnupg is
 # installed here too, not because any of those three need it, but to verify
 # Claude Code's signing key below. bubblewrap is not optional - Claude
-# Code's sandbox mode needs it.
+# Code's sandbox mode needs it, and it was missing despite appearing in the
+# common-utils package list (ADR-0005).
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         bubblewrap \
@@ -122,4 +123,4 @@ RUN install -d -m 0755 /etc/apt/keyrings \
         > /etc/apt/sources.list.d/claude-code.list \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends claude-code \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /root/.gnupg

@@ -172,9 +172,21 @@ setup_file() {
 
 @test "Claude Code's apt key fingerprint matches Anthropic's published fingerprint" {
   run docker run --rm "$IMAGE" sh -c \
-    "gpg --show-keys --with-colons --with-fingerprint /etc/apt/keyrings/claude-code.asc | awk -F: '\$1 == \"fpr\" { print \$10; exit }'"
+    "gpg --show-keys --with-colons --with-fingerprint /etc/apt/keyrings/claude-code.asc 2>/dev/null | awk -F: '\$1 == \"fpr\" { print \$10; exit }'"
   [ "$status" -eq 0 ]
   [ "$output" = "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE" ]
+}
+
+@test "\$HOME carries no file from gh, gnupg, vim or claude" {
+  run docker run --rm "$IMAGE" sh -c '
+    [ ! -e /home/vscode/.config/gh ] &&
+    [ ! -e /home/vscode/.gnupg ] &&
+    [ ! -e /home/vscode/.vimrc ] &&
+    [ ! -e /home/vscode/.viminfo ] &&
+    [ ! -e /home/vscode/.claude ] &&
+    [ ! -e /home/vscode/.claude.json ]
+  '
+  [ "$status" -eq 0 ]
 }
 
 # Issue #7's explicit exclusion list: single-repo tools that stay with
