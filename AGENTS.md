@@ -11,7 +11,9 @@ Homebrew and starship are wired in system-wide (issue #5): Homebrew's installer 
 `starship` ships on `PATH` with no `starship init` line anywhere, so shell ergonomics stay a personal-dotfiles concern (ADR-0010).
 Chezmoi and `dotfiles-bootstrap` are wired in (issue #6): chezmoi installs via `get.chezmoi.io -b /usr/local/bin`, never `~/.local` (ADR-0005), and `/usr/local/bin/dotfiles-bootstrap` branches cold `chezmoi init --apply --force` versus warm `chezmoi update --apply --force` (ADR-0009).
 A fixture dotfiles repository under `test/dev/fixtures/dotfiles` backs the bats suite.
-The remaining tools (`gh`, `dive`, `vim`, `bubblewrap`, Claude Code) have not landed yet (issues #7 and #8).
+The tools layer is wired in (issue #7): `gh`, `vim` and `bubblewrap` install via apt from Debian's own repository; `dive` has no Debian package and rides the same `brew install` as `starship`, so it only resolves in a login shell; Claude Code installs from its official signed apt repository (`stable` channel), with the downloaded key's fingerprint checked against Anthropic's published fingerprint before the repository is trusted.
+None of the explicitly excluded single-repo tools (`kubectl`, `k9s`, `helm`, `flux`, `talosctl`, `talhelper`, `sops`, `age`, `yq`, `gptfdisk`, `xorriso`, `gemini-cli`) are installed.
+Issue #8 (this repo's own devcontainer) has not landed yet.
 
 ## Known consumers pending migration
 

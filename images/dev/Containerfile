@@ -61,7 +61,7 @@ ENV NONINTERACTIVE=1
 
 RUN touch /.dockerenv \
     && /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
-    && "$HOMEBREW_PREFIX/bin/brew" install starship \
+    && "$HOMEBREW_PREFIX/bin/brew" install dive starship \
     && chown -R 1000:1000 "$HOMEBREW_PREFIX" \
     && rm -f /.dockerenv \
     && rm -rf /root/.cache/Homebrew \
@@ -84,3 +84,42 @@ RUN curl -fsSL get.chezmoi.io | sh -s -- -b /usr/local/bin
 # in, since a shared image carries no one's configuration (ADR-0001).
 COPY dotfiles-bootstrap /usr/local/bin/dotfiles-bootstrap
 RUN chmod 0755 /usr/local/bin/dotfiles-bootstrap
+
+# The remaining tools every consumer previously installed by hand (issue
+# #7): gh, vim and bubblewrap all ship in Debian's own repository. gnupg is
+# installed here too, not because any of those three need it, but to verify
+# Claude Code's signing key below. bubblewrap is not optional - Claude
+# Code's sandbox mode needs it.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        bubblewrap \
+        gh \
+        gnupg \
+        vim \
+    && rm -rf /var/lib/apt/lists/*
+
+# dive has no Debian package. It ships as a Homebrew formula rather than a
+# hand-rolled GitHub-release install, so it rides the same brew install
+# above as starship - see that block's comment for why root can run it and
+# why the prefix ends up vscode-owned.
+
+# Claude Code installs from its official signed apt repository, `stable`
+# channel: the native installer manages ~/.local/bin/claude into
+# ~/.local/share/claude/versions/, writing into the one directory this
+# image must leave alone, and Homebrew can't stand in either, since
+# `claude-code` is a cask and Homebrew on Linux doesn't support casks. apt
+# installations don't auto-update, which is correct behaviour for a
+# versioned base image - a rebuild refreshes it. The downloaded key's
+# fingerprint is checked against the one Anthropic publishes before
+# anything is installed with it.
+RUN install -d -m 0755 /etc/apt/keyrings \
+    && curl -fsSL https://downloads.claude.ai/keys/claude-code.asc \
+        -o /etc/apt/keyrings/claude-code.asc \
+    && fingerprint="$(gpg --show-keys --with-colons --with-fingerprint /etc/apt/keyrings/claude-code.asc \
+        | awk -F: '$1 == "fpr" { print $10; exit }')" \
+    && [ "$fingerprint" = "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE" ] \
+    && echo "deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" \
+        > /etc/apt/sources.list.d/claude-code.list \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends claude-code \
+    && rm -rf /var/lib/apt/lists/*

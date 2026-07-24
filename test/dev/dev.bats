@@ -142,3 +142,51 @@ setup_file() {
   run docker run --rm "$IMAGE" sh -c 'grep -iE "brew|starship" /etc/zsh/zshrc'
   [ "$status" -ne 0 ]
 }
+
+@test "gh, vim, bubblewrap and claude all resolve on PATH" {
+  run docker run --rm "$IMAGE" sh -c \
+    'command -v gh && command -v vim && command -v bwrap && command -v claude'
+  [ "$status" -eq 0 ]
+}
+
+@test "gh, vim and bubblewrap are installed via apt, not hand-rolled" {
+  run docker run --rm "$IMAGE" sh -c \
+    'dpkg -s gh >/dev/null && dpkg -s vim >/dev/null && dpkg -s bubblewrap >/dev/null'
+  [ "$status" -eq 0 ]
+}
+
+# dive is a Homebrew formula, like starship, so it only resolves in a
+# non-interactive login shell where /etc/zsh/zshenv sources brew's shellenv
+# (same reasoning as the "brew resolves" test above).
+@test "dive resolves on PATH in a non-interactive login shell" {
+  run docker run --rm --user vscode "$IMAGE" zsh -lc 'command -v dive'
+  [ "$status" -eq 0 ]
+  [ "$output" = "/home/linuxbrew/.linuxbrew/bin/dive" ]
+}
+
+@test "Claude Code is installed from the signed apt repository, stable channel" {
+  run docker run --rm "$IMAGE" sh -c 'dpkg -s claude-code >/dev/null && cat /etc/apt/sources.list.d/claude-code.list'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"downloads.claude.ai/claude-code/apt/stable stable main"* ]]
+}
+
+@test "Claude Code's apt key fingerprint matches Anthropic's published fingerprint" {
+  run docker run --rm "$IMAGE" sh -c \
+    "gpg --show-keys --with-colons --with-fingerprint /etc/apt/keyrings/claude-code.asc | awk -F: '\$1 == \"fpr\" { print \$10; exit }'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE" ]
+}
+
+# Issue #7's explicit exclusion list: single-repo tools that stay with
+# their repo rather than landing in the shared base.
+@test "none of the explicitly excluded single-repo tools are present" {
+  run docker run --rm "$IMAGE" sh -c '
+    for tool in kubectl k9s helm flux talosctl talhelper sops age yq gptfdisk xorriso gemini-cli; do
+      if command -v "$tool" >/dev/null 2>&1; then
+        echo "unexpectedly present: $tool"
+      fi
+    done
+  '
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
