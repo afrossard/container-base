@@ -2,9 +2,9 @@
 
 ## Status
 
-No Containerfile or CI yet as of 2026-07-24 - only the domain docs (`CONTEXT.md`, `docs/adr/`) exist so far.
-The dev image is fully specified (ADR-0004 through ADR-0010, and issue #1) and not yet built.
-When it is built, it lives in `images/dev/`, where the directory name is the tag variant.
+`images/dev/` holds the walking skeleton from issue #2: `devcontainer.json` and `Containerfile`, built on `debian:trixie-slim` with the `common-utils` feature pinned via the committed `devcontainer-lock.json`.
+CI (`.github/workflows/dev-image.yml`) builds it with `--frozen-lockfile` and runs the bats suite in `test/dev/` on every pull request.
+Not yet published to GHCR (issue #3), and none of the dev layer, language managers, or dotfiles-bootstrap have landed yet (issues #4 through #8).
 
 ## Known consumers pending migration
 
