@@ -51,6 +51,8 @@ home_stat() {
 
 @test "cold bootstrap: exits 0 with no TTY, fixture's ~/.zshrc lands" {
   run run_bootstrap
+  echo "status=$status"
+  echo "output=$output"
   [ "$status" -eq 0 ]
 
   run home_file .zshrc
