@@ -2,8 +2,9 @@
 
 ## Status
 
-No Containerfile or CI yet as of 2026-07-23 - only the domain docs (`CONTEXT.md`, `docs/adr/`) exist so far.
-The dev image is fully specified (ADR-0004 through ADR-0007) and not yet built.
+No Containerfile or CI yet as of 2026-07-24 - only the domain docs (`CONTEXT.md`, `docs/adr/`) exist so far.
+The dev image is fully specified (ADR-0004 through ADR-0010, and issue #1) and not yet built.
+When it is built, it lives in `images/dev/`, where the directory name is the tag variant.
 
 ## Known consumers pending migration
 
