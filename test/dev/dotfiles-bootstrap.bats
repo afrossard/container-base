@@ -27,14 +27,14 @@ setup_file() {
 
   # A real dotfiles clone never hits this: git only checks ownership on a
   # local filesystem source, not a network remote. The fixture stands in
-  # for "upstream" as a bind-mounted local path, so its host-side owner
-  # (whoever's running the test) must be reconciled with the container's
-  # vscode (uid 1000) or git refuses it as a "dubious ownership" source on
-  # native Linux Docker. `|| true`: Docker Desktop's bind-mount translation
-  # already presents the mount as vscode-owned and rejects the chown as a
-  # no-op, which is fine - only Linux CI needs this to actually take effect.
-  docker run --rm -v "$FIXTURE_UPSTREAM:/fixtures/upstream" "$IMAGE" \
-    chown -R 1000:1000 /fixtures/upstream || true
+  # for "upstream" as a bind-mounted local path, so on native Linux Docker
+  # (not macOS Docker Desktop, which translates bind-mount ownership away)
+  # its host-side owner doesn't match the container's vscode (uid 1000),
+  # and git refuses it as a "dubious ownership" source. Trusting it via a
+  # dedicated GIT_CONFIG_GLOBAL file - rather than chowning the fixture -
+  # keeps the mount read-only and never touches host-owned files.
+  export GIT_CONFIG_FIXTURE="$BATS_FILE_TMPDIR/gitconfig"
+  printf '[safe]\n\tdirectory = *\n' > "$GIT_CONFIG_FIXTURE"
 
   export HOME_VOLUME="dotfiles-bootstrap-test-home-$$"
   docker volume create "$HOME_VOLUME" >/dev/null
@@ -47,7 +47,9 @@ teardown_file() {
 run_bootstrap() {
   docker run --rm --user vscode \
     -e DOTFILES_REPO=/fixtures/upstream \
+    -e GIT_CONFIG_GLOBAL=/fixtures/gitconfig \
     -v "$FIXTURE_UPSTREAM:/fixtures/upstream:ro" \
+    -v "$GIT_CONFIG_FIXTURE:/fixtures/gitconfig:ro" \
     -v "$HOME_VOLUME:/home/vscode" \
     "$IMAGE" dotfiles-bootstrap
 }
