@@ -11,7 +11,9 @@
     "format:check": "prettier --check .",
     "prepare": "husky",
     "build:dev": "devcontainer build --workspace-folder . --config images/dev/devcontainer.json --frozen-lockfile --image-name $npm_package_config_devImage",
-    "test:dev": "IMAGE=$npm_package_config_devImage bats test/dev"
+    "test:dev": "IMAGE=$npm_package_config_devImage bats test/dev",
+    "publish:dev": "devcontainer build --workspace-folder . --config images/dev/devcontainer.json --frozen-lockfile --platform linux/amd64,linux/arm64 --push --image-name $IMAGE",
+    "verify:publish-dev": "bats test/publish-dev"
   },
   "devDependencies": {
     "@devcontainers/cli": "^0.88.0",
