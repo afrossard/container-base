@@ -25,6 +25,17 @@ setup_file() {
   git -C "$FIXTURE_UPSTREAM" -c user.email=test@example.com -c user.name=test \
     commit -q -m "fixture v1"
 
+  # A real dotfiles clone never hits this: git only checks ownership on a
+  # local filesystem source, not a network remote. The fixture stands in
+  # for "upstream" as a bind-mounted local path, so its host-side owner
+  # (whoever's running the test) must be reconciled with the container's
+  # vscode (uid 1000) or git refuses it as a "dubious ownership" source on
+  # native Linux Docker. `|| true`: Docker Desktop's bind-mount translation
+  # already presents the mount as vscode-owned and rejects the chown as a
+  # no-op, which is fine - only Linux CI needs this to actually take effect.
+  docker run --rm -v "$FIXTURE_UPSTREAM:/fixtures/upstream" "$IMAGE" \
+    chown -R 1000:1000 /fixtures/upstream || true
+
   export HOME_VOLUME="dotfiles-bootstrap-test-home-$$"
   docker volume create "$HOME_VOLUME" >/dev/null
 }
@@ -51,8 +62,6 @@ home_stat() {
 
 @test "cold bootstrap: exits 0 with no TTY, fixture's ~/.zshrc lands" {
   run run_bootstrap
-  echo "status=$status"
-  echo "output=$output"
   [ "$status" -eq 0 ]
 
   run home_file .zshrc
