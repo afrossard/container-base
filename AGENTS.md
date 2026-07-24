@@ -9,7 +9,9 @@ Published multi-arch to GHCR on a git tag (issue #3, `.github/workflows/publish-
 Neither installer touches `$HOME`.
 Homebrew and starship are wired in system-wide (issue #5): Homebrew's installer runs as root during the build (its own container check needs a faked `/.dockerenv`, since BuildKit `RUN` steps don't set one up), the prefix at `/home/linuxbrew/.linuxbrew` is chowned to the eventual vscode uid/gid, and `brew shellenv`'s output is appended to `/etc/zsh/zshenv`.
 `starship` ships on `PATH` with no `starship init` line anywhere, so shell ergonomics stay a personal-dotfiles concern (ADR-0010).
-Chezmoi, the remaining tools (`gh`, `dive`, `vim`, `bubblewrap`, Claude Code), and `dotfiles-bootstrap` have not landed yet (issues #6 through #8).
+Chezmoi and `dotfiles-bootstrap` are wired in (issue #6): chezmoi installs via `get.chezmoi.io -b /usr/local/bin`, never `~/.local` (ADR-0005), and `/usr/local/bin/dotfiles-bootstrap` branches cold `chezmoi init --apply --force` versus warm `chezmoi update --apply --force` (ADR-0009).
+A fixture dotfiles repository under `test/dev/fixtures/dotfiles` backs the bats suite.
+The remaining tools (`gh`, `dive`, `vim`, `bubblewrap`, Claude Code) have not landed yet (issues #7 and #8).
 
 ## Known consumers pending migration
 
