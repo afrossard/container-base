@@ -1,0 +1,5 @@
+# This repo is the dev image's own first consumer (issue #8): the workspace
+# for hacking on container-base builds FROM the same published artifact
+# every other consumer will, pinned so Renovate owns the bump rather than
+# floating on whatever `dev` last built.
+FROM ghcr.io/afrossard/container-base:0.0.3-dev

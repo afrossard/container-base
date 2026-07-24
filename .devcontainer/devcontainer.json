@@ -1,0 +1,17 @@
+{
+  "name": "container-base",
+  "build": {
+    "dockerfile": "Containerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "moby": false
+    }
+  },
+  "remoteEnv": {
+    "DOTFILES_REPO": "${localEnv:DOTFILES_REPO}"
+  },
+  "postCreateCommand": "mise trust && mise install && npm ci",
+  "postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder} && dotfiles-bootstrap",
+  "remoteUser": "vscode"
+}
