@@ -1,3 +1,42 @@
 FROM debian:trixie-slim
 
 ENV LANG=C.UTF-8
+
+# uv owns the Python interpreter (ADR-0006). The shell installer targets
+# $HOME and appends to ~/.zshrc; the documented COPY --from form avoids both.
+COPY --from=ghcr.io/astral-sh/uv:0.11.32 /uv /uvx /bin/
+
+# mise owns Node and every language added later (ADR-0006), installed from
+# its own apt repository rather than the `mise.run` script, which also
+# targets $HOME.
+#
+# zsh and sudo are installed here, ahead of the common-utils feature that
+# configures them further, so /etc/zsh/zshenv and /etc/sudoers already exist
+# for the appends below. The feature detects both already present and
+# leaves this layer's edits alone.
+ENV MISE_DATA_DIR=/usr/local/share/mise
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        extrepo \
+        sudo \
+        zsh \
+    && extrepo enable mise \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mise \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p "$MISE_DATA_DIR" \
+    && chown -R 1000:1000 "$MISE_DATA_DIR"
+
+# mise runs system-wide, in shims mode (ADR-0008): the data directory above
+# is shared and vscode-owned, the shims directory is on PATH for every
+# shell, and it is prepended to sudo's secure_path, the only one of the
+# three sudo actually reads. MISE_GLOBAL_CONFIG_FILE is deliberately unset:
+# version pinning is per project, and a global config is the baked fallback
+# ADR-0006 rules out.
+RUN sed -i \
+        "s|^Defaults\tsecure_path=\"|Defaults\tsecure_path=\"${MISE_DATA_DIR}/shims:|" \
+        /etc/sudoers \
+    && shims_line="export PATH=\"${MISE_DATA_DIR}/shims:\$PATH\"" \
+    && printf '\n# mise shims (ADR-0008)\n%s\n' "$shims_line" >> /etc/zsh/zshenv \
+    && printf '# mise shims (ADR-0008)\n%s\n' "$shims_line" > /etc/profile.d/mise-shims.sh

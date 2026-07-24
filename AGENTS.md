@@ -4,7 +4,10 @@
 
 `images/dev/` holds the walking skeleton from issue #2: `devcontainer.json` and `Containerfile`, built on `debian:trixie-slim` with the `common-utils` feature pinned via the committed `devcontainer-lock.json`.
 CI (`.github/workflows/dev-image.yml`) builds it with `--frozen-lockfile` and runs the bats suite in `test/dev/` on every pull request.
-Not yet published to GHCR (issue #3), and none of the dev layer, language managers, or dotfiles-bootstrap have landed yet (issues #4 through #8).
+Published multi-arch to GHCR on a git tag (issue #3, `.github/workflows/publish-dev-image.yml`).
+`uv` and `mise` are wired in system-wide (issue #4): `uv` via `COPY --from=ghcr.io/astral-sh/uv`, `mise` via its apt repository, `mise`'s data directory moved to `/usr/local/share/mise` and vscode-owned, shims on `PATH` and prepended to sudo's `secure_path`.
+Neither installer touches `$HOME`.
+The dev layer (Homebrew, chezmoi, starship), the remaining tools (`gh`, `dive`, `vim`, `bubblewrap`, Claude Code), and `dotfiles-bootstrap` have not landed yet (issues #5 through #8).
 
 ## Known consumers pending migration
 
