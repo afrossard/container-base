@@ -40,6 +40,8 @@ setup_file() {
 @test "uv is installed to a system path, not \$HOME" {
   run docker run --rm "$IMAGE" sh -c 'command -v uv && command -v uvx'
   [ "$status" -eq 0 ]
+  [ "$output" = "/usr/bin/uv
+/usr/bin/uvx" ]
 }
 
 @test "mise is installed via apt, at /usr/bin/mise" {
