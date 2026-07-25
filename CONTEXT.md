@@ -35,6 +35,11 @@ For example `1.4.2-dev`, `1.4.2-base-prod`, `1.4.2-python-prod`.
 **Consumer**:
 A repo whose devcontainer or production Containerfile builds FROM one of these images.
 
+**Reference profile**:
+This repo's own `.devcontainer/devcontainer.json`, maintained as the dev image's first consumer.
+It composes launch-time agent hardening - egress firewall, dropped capabilities, no host-secret mounts, a `~/.claude` volume - on top of the dev image, and is both the dogfooding test and the pattern other consumers copy (ADR-0011).
+_Avoid_: hardened image - the hardening is launch-time configuration a consumer composes, not a separate published image.
+
 **Dotfiles bootstrap**:
 Applying the user's chezmoi-managed configuration to a container after it starts.
 This repo publishes the tools that make it possible and never carries the configuration itself, which belongs to `dotfiles`.
