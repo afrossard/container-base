@@ -11,8 +11,8 @@
   "remoteEnv": {
     "DOTFILES_REPO": "${localEnv:DOTFILES_REPO}"
   },
-  "postCreateCommand": "mise trust && mise install && npm ci",
-  "postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder} && dotfiles-bootstrap",
+  "postCreateCommand": "${containerWorkspaceFolder}/.devcontainer/post-create",
+  "postStartCommand": "${containerWorkspaceFolder}/.devcontainer/post-start",
   "waitFor": "postStartCommand",
   "remoteUser": "vscode",
   "customizations": {
