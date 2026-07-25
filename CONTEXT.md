@@ -40,6 +40,16 @@ This repo's own `.devcontainer/devcontainer.json`, maintained as the dev image's
 It composes launch-time agent hardening - egress firewall, dropped capabilities, no host-secret mounts, a `~/.claude` volume - on top of the dev image, and is both the dogfooding test and the pattern other consumers copy (ADR-0011).
 _Avoid_: hardened image - the hardening is launch-time configuration a consumer composes, not a separate published image.
 
+**Agent runtime**:
+The isolated, hardened environment an autonomous agent executes in - substrate-confined (ADR-0012), sudo-less, headless (no attached editor), default-deny on host reach - as distinct from the dev container a trusted human works in for convenience.
+Still being shaped: close to the reference profile today but not identical to it, and whether it stays in this repo depends on how much it ends up sharing with the dev container.
+_Avoid_: agent sandbox - that is the agent CLI's own in-process confinement (mechanism 7 of the issue #16 survey), a layer inside the runtime, not the runtime itself.
+
+**Isolation substrate**:
+The host or VM a container is launched onto - the boundary that actually contains an escape, one tier below the launch-time configuration that runs inside it.
+For docker-heavy agent work it is a disposable micro VM holding only the assigned workspace and docker, so an escape yields nothing the agent was not already granted (ADR-0012).
+_Avoid_: sandbox - that names the agent CLI's own syscall/filesystem confinement (bubblewrap, seccomp, Seatbelt), a different layer running inside the container, not the boundary underneath it.
+
 **Dotfiles bootstrap**:
 Applying the user's chezmoi-managed configuration to a container after it starts.
 This repo publishes the tools that make it possible and never carries the configuration itself, which belongs to `dotfiles`.
