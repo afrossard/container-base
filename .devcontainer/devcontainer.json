@@ -13,5 +13,19 @@
   },
   "postCreateCommand": "mise trust && mise install && npm ci",
   "postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder} && dotfiles-bootstrap",
-  "remoteUser": "vscode"
+  "waitFor": "postStartCommand",
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "EditorConfig.EditorConfig",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-containers",
+        "charliermarsh.ruff",
+        "eamodio.gitlens",
+        "mhutchie.git-graph",
+        "donjayamanne.githistory"
+      ]
+    }
+  }
 }
