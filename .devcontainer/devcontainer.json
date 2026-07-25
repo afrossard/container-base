@@ -1,0 +1,31 @@
+{
+  "name": "container-base",
+  "build": {
+    "dockerfile": "Containerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "moby": false
+    }
+  },
+  "remoteEnv": {
+    "DOTFILES_REPO": "${localEnv:DOTFILES_REPO}"
+  },
+  "postCreateCommand": "${containerWorkspaceFolder}/.devcontainer/post-create",
+  "postStartCommand": "${containerWorkspaceFolder}/.devcontainer/post-start",
+  "waitFor": "postStartCommand",
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "EditorConfig.EditorConfig",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-containers",
+        "charliermarsh.ruff",
+        "eamodio.gitlens",
+        "mhutchie.git-graph",
+        "donjayamanne.githistory"
+      ]
+    }
+  }
+}
