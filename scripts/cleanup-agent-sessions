@@ -18,9 +18,13 @@
 # the launcher itself already does.
 #
 # Usage:
-#   scripts/cleanup-agent-sessions [--dry-run]
+#   scripts/cleanup-agent-sessions [--dry-run] [--force]
 #
-#   --dry-run   list what would be removed, without removing anything
+#   --dry-run   list what would be removed, without removing anything or
+#               asking for confirmation
+#   --force     skip the confirmation prompt (for scripted use); refused
+#               outright rather than hanging if stdin isn't a terminal to
+#               ask on and --force wasn't given
 
 set -eo pipefail
 
@@ -41,21 +45,28 @@ usage() {
 }
 
 dry_run=0
-case "${1:-}" in
-  --dry-run)
-    dry_run=1
-    ;;
-  -h | --help)
-    usage
-    exit 0
-    ;;
-  "") ;;
-  *)
-    echo "cleanup-agent-sessions: unrecognized argument: $1" >&2
-    usage
-    exit 1
-    ;;
-esac
+force=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    --force)
+      force=1
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "cleanup-agent-sessions: unrecognized argument: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
 
 repo=$(repo_name)
 stopped=$(msb list --label "repo=$repo" --stopped -q 2>/dev/null || true)
@@ -71,6 +82,22 @@ printf '%s\n' "$stopped" | sed 's/^/  /' >&2
 if [ "$dry_run" = "1" ]; then
   echo "cleanup-agent-sessions: --dry-run, nothing removed" >&2
   exit 0
+fi
+
+if [ "$force" != "1" ]; then
+  if [ ! -t 0 ]; then
+    echo "cleanup-agent-sessions: stdin isn't a terminal to confirm on; pass --force to remove without asking" >&2
+    exit 1
+  fi
+
+  read -r -p "Remove these and their volumes? [y/N] " confirm
+  case "$confirm" in
+    y | Y) ;;
+    *)
+      echo "cleanup-agent-sessions: aborted" >&2
+      exit 1
+      ;;
+  esac
 fi
 
 while IFS= read -r name; do
