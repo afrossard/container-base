@@ -7,6 +7,12 @@
 # rather than sharing one global default (a stopped sandbox and its volume
 # otherwise just sit there consuming disk space indefinitely).
 #
+# Does not touch --persist-claude-auth's own volume/file (CLAUDE_AUTH_VOLUME,
+# CLAUDE_AUTH_JSON): that state is deliberately shared across every session
+# for this operator, not per-session, so removing a session's sandbox here
+# must not remove it - `msb volume remove agent-claude-creds` by hand, and
+# delete the CLAUDE_AUTH_JSON file, if you want to reset that credential.
+#
 # Without --name, matches on the `repo=<repo-name>` label
 # scripts/launch-agent-runtime attaches at launch, the same label it uses
 # for its own matching - not a name-prefix guess. A sandbox created before
