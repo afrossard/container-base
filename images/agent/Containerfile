@@ -3,38 +3,20 @@
 # way .devcontainer/Containerfile pins it so Renovate owns the bump.
 FROM ghcr.io/afrossard/container-base:0.0.3-dev
 
-# A full docker daemon of this runtime's own, not the host's socket bridged
-# in (ADR-0013). Installed from Docker's own apt repository, the same
-# signed-key pattern the dev image uses for Claude Code. iptables is
-# dockerd's own NAT/filter dependency, absent from the dev image's
-# dependency set. tini reaps dockerd's orphaned children under the
-# entrypoint below - the one thing that makes this variant need an
-# entrypoint at all, unlike the dev image (ADR-0007).
+# The docker-in-docker devcontainer feature (images/agent/devcontainer.json)
+# installs the engine itself - docker-ce, containerd, buildx, and iptables,
+# including its own iptables-legacy/nft alternative selection - so this
+# Containerfile only adds tini, which the feature doesn't carry and which
+# the entrypoint below needs as PID 1 to reap dockerd's orphaned children.
 RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-        gnupg \
-    && install -d -m 0755 /etc/apt/keyrings \
-    && curl -fsSL https://download.docker.com/linux/debian/gpg \
-        -o /etc/apt/keyrings/docker.asc \
-    && chmod a+r /etc/apt/keyrings/docker.asc \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable" \
-        > /etc/apt/sources.list.d/docker.list \
-    && apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        containerd.io \
-        docker-buildx-plugin \
-        docker-ce \
-        docker-ce-cli \
-        iptables \
-        tini \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
     && rm -rf /var/lib/apt/lists/*
 
 COPY entrypoint /usr/local/bin/agent-entrypoint
 RUN chmod 0755 /usr/local/bin/agent-entrypoint
 
-# tini as PID 1 reaps dockerd's children; the entrypoint script starts
-# dockerd, waits for its socket, then execs whatever command the launcher
-# supplies (docs/research/0022's "drop the sleep infinity fallback").
+# tini as PID 1 reaps dockerd's children; the entrypoint script delegates
+# dockerd's own startup to the feature's docker-init.sh and drops the given
+# command to a non-root user (docs/research/0022's "drop the sleep infinity
+# fallback" still applies - no default command).
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint"]

@@ -13,6 +13,12 @@
 # capabilities a real launch profile grants; it is not the launcher script's
 # own profile (that's exercised separately, against msb itself).
 #
+# dockerd itself is started by docker-init.sh, installed by the
+# docker-in-docker devcontainer feature (images/agent/devcontainer.json);
+# the entrypoint drops the given command to vscode via runuser once the
+# daemon is up, so several assertions below check for that user rather
+# than root.
+#
 # Expects IMAGE to name an already-built image (set by `npm run test:agent`,
 # which passes the same tag `npm run build:agent` built).
 
@@ -29,10 +35,19 @@ teardown() {
   docker volume rm -f "$volume" >/dev/null 2>&1 || true
 }
 
+# docker-init.sh (the docker-in-docker feature) prints its own startup
+# chatter to the same stream before handing off, so assertions below match
+# a substring rather than the whole of $output.
 @test "an explicit command runs and its output comes through" {
   run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" echo hello
   [ "$status" -eq 0 ]
-  [ "$output" = "hello" ]
+  [[ "$output" == *"hello"* ]]
+}
+
+@test "the given command runs as vscode, not root, and can reach the docker socket without sudo" {
+  run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" id
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"uid=1000(vscode) gid=1000(vscode) groups=1000(vscode),999(docker)"* ]]
 }
 
 @test "no command given fails rather than falling back to a default" {
@@ -61,7 +76,7 @@ teardown() {
   run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" \
     sh -c 'docker info --format "{{.Driver}}"'
   [ "$status" -eq 0 ]
-  [ "$output" = "overlayfs" ]
+  [[ "$output" == *"overlayfs"* ]]
 }
 
 @test "a real container run succeeds inside the guest" {

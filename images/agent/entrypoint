@@ -1,27 +1,25 @@
 #!/bin/sh
 # dockerd is this runtime's own daemon, not the host's socket bridged in
-# (ADR-0013), so it starts here, before the command the launcher supplies.
+# (ADR-0013). Its startup (wait-for-socket, cgroup v2 nesting, iptables
+# alternative selection, containerd wiring) is delegated to docker-init.sh,
+# installed by the docker-in-docker feature (images/agent/devcontainer.json)
+# rather than reimplemented here.
 set -eu
-
-dockerd >/var/log/dockerd.log 2>&1 &
-
-i=0
-while [ ! -S /var/run/docker.sock ]; do
-  i=$((i + 1))
-  if [ "$i" -ge 30 ]; then
-    echo "agent-entrypoint: dockerd did not start within 30s" >&2
-    cat /var/log/dockerd.log >&2
-    exit 1
-  fi
-  sleep 1
-done
 
 # No default command (ADR-0013): the container's lifetime is the task's
 # lifetime, so a missing command is an error rather than a fallback to a
-# standing process like `sleep infinity`.
+# standing process like `sleep infinity`. Checked before handing off to
+# docker-init.sh so a missing command fails fast, without waiting on dockerd.
 if [ "$#" -eq 0 ]; then
   echo "agent-entrypoint: no command given; the agent runtime has no default command" >&2
   exit 1
 fi
 
-exec "$@"
+# dockerd itself runs as root (docker-init.sh execs under this script's own
+# uid). The given command drops to vscode via runuser once the daemon is
+# up, rather than running the task as root too - the feature already put
+# vscode in the docker group at build time, so it reaches the socket
+# without needing root itself. PATH is vscode's plain environment, not the
+# zshenv-sourced login-shell one (runuser -u doesn't run a login shell); a
+# task needing mise/Homebrew tools invokes them itself.
+exec /usr/local/share/docker-init.sh runuser -u vscode -- "$@"

@@ -1,9 +1,11 @@
 {
-  // dockerd needs root; unlike images/dev, this variant never drops to a
-  // non-root remoteUser.
   "name": "agent",
   "build": {
     "dockerfile": "Containerfile"
   },
-  "remoteUser": "root"
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": false
+    }
+  }
 }
