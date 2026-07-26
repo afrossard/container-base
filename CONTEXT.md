@@ -45,6 +45,15 @@ The disposable virtual machine an autonomous agent executes inside and cannot le
 One exists per agent session, and the repo is its boundary (ADR-0013).
 _Avoid_: agent sandbox, agent container - the first is the agent CLI's own in-process confinement (mechanism 7 of the issue #16 survey), a layer inside the runtime; the second denies the hypervisor boundary that is the whole point.
 
+**Agent image**:
+The published `{version}-agent` image (`images/agent/`): the dev image plus a docker daemon of its own and an entrypoint that starts it before handing off to the launcher's command, no dev layer added.
+It is the artifact a per-container-VM tool boots directly as a VM guest (ADR-0014); the running guest is the agent runtime, not this image.
+_Avoid_: agent runtime - that names the running VM this image becomes once launched, not the artifact GHCR holds.
+
+**Launcher**:
+`scripts/launch-agent-runtime`, the host-side script that boots the agent image as a microsandbox guest: a disk-backed volume for `/var/lib/docker` (msb's default nests overlayfs on overlayfs, which fails a real build), `--secret` credential injection, and no default command.
+Host-side tooling, not a container image - a narrow, documented exception to this repo's image-only scope (ADR-0001, ADR-0014).
+
 **Agent session**:
 One unit of autonomous agent work, bounded by the lifetime of the agent runtime it runs in.
 Disposing of the runtime ends the session and everything it accumulated, apart from what was pushed to the remote.

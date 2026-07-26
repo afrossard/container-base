@@ -4,7 +4,8 @@
   "private": true,
   "description": "Tooling-only manifest: prettier formatting for this repo's Markdown, JSON and YAML, and the devcontainer CLI that builds the images. No runtime JavaScript.",
   "config": {
-    "devImage": "container-base:dev-test"
+    "devImage": "container-base:dev-test",
+    "agentImage": "container-base:agent-test"
   },
   "scripts": {
     "format": "prettier --write .",
@@ -13,7 +14,11 @@
     "build:dev": "devcontainer build --workspace-folder . --config images/dev/devcontainer.json --frozen-lockfile --image-name $npm_package_config_devImage",
     "test:dev": "IMAGE=$npm_package_config_devImage bats test/dev",
     "publish:dev": "devcontainer build --workspace-folder . --config images/dev/devcontainer.json --frozen-lockfile --platform linux/amd64,linux/arm64 --push --image-name $IMAGE",
-    "verify:publish-dev": "bats test/publish-dev"
+    "verify:publish-dev": "bats test/publish-dev",
+    "build:agent": "devcontainer build --workspace-folder . --config images/agent/devcontainer.json --image-name $npm_package_config_agentImage",
+    "test:agent": "IMAGE=$npm_package_config_agentImage bats test/agent",
+    "publish:agent": "devcontainer build --workspace-folder . --config images/agent/devcontainer.json --platform linux/amd64,linux/arm64 --push --image-name $IMAGE",
+    "verify:publish-agent": "bats test/publish-agent"
   },
   "devDependencies": {
     "@devcontainers/cli": "^0.88.0",

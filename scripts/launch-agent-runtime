@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# Launches the published -agent image (ADR-0014) as a disposable
+# microsandbox guest (ADR-0013), the recommendation of
+# docs/research/0022-vm-tool-experiment-results.md.
+#
+# This is host-side tooling, not a container image, and is a narrow,
+# deliberate exception to ADR-0001's "this repo publishes shared container
+# images only" scope - recorded as such in ADR-0014.
+#
+# --secret injects a credential without ever placing its real value in the
+# guest's own environment: the guest sees only a placeholder string, and the
+# real value is substituted in-flight, only for traffic to the host it is
+# scoped to (docs/research/0022's addendum, directly verified against the
+# live Anthropic API).
+#
+# The disk-backed --mount-named volume gives /var/lib/docker its own
+# filesystem instead of msb's default, which nests overlayfs on overlayfs
+# and fails any real multi-layer build (docs/research/0022's header
+# finding). The volume is created once, on first use, and reused by every
+# later session - provisioning it per launch would pay disk-format cost on
+# every disposable guest for no reason.
+#
+# There is no default command: the guest's lifetime is the task's lifetime
+# (ADR-0013's disposable-VM model), so a missing command is a usage error,
+# not a fallback to a standing process.
+#
+# Usage:
+#   scripts/launch-agent-runtime --name SESSION [--image REF] \
+#     [--secret ENV@HOST]... -- COMMAND...
+#
+#   --name SESSION      sandbox name, forwarded to `msb run --name --replace`
+#   --image REF         agent image to launch
+#                        (default: ghcr.io/afrossard/container-base:0.0.3-agent)
+#   --secret ENV@HOST    forwarded verbatim to `msb run --secret` (repeatable);
+#                        ENV is a host environment variable, never a literal
+#                        value (msb itself rejects an inline ENV=VALUE form)
+#
+# Environment:
+#   DOCKER_DATA_VOLUME  name of the persistent /var/lib/docker volume
+#                       (default: agent-docker-data)
+#   DOCKER_DATA_SIZE    size of that volume (default: 20G)
+
+# Not -u: macOS ships bash 3.2 (GPLv3 avoidance), where `set -u` treats
+# "${secrets[@]}" as unbound whenever the array is still empty - a real
+# footgun found by running this script, not a style choice.
+set -eo pipefail
+
+: "${DOCKER_DATA_VOLUME:=agent-docker-data}"
+: "${DOCKER_DATA_SIZE:=20G}"
+
+image="ghcr.io/afrossard/container-base:0.0.3-agent"
+name=""
+secrets=()
+
+usage() {
+  sed -n '/^# Usage:/,/^$/p' "$0" | cut -c3-
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --name)
+      name="$2"
+      shift 2
+      ;;
+    --image)
+      image="$2"
+      shift 2
+      ;;
+    --secret)
+      secrets+=(--secret "$2")
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "launch-agent-runtime: unrecognized argument: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+if [ -z "$name" ]; then
+  echo "launch-agent-runtime: --name is required" >&2
+  usage
+  exit 1
+fi
+
+if [ "$#" -eq 0 ]; then
+  echo "launch-agent-runtime: a command is required after --; the agent runtime has no default command (ADR-0013)" >&2
+  exit 1
+fi
+
+if ! msb volume inspect "$DOCKER_DATA_VOLUME" >/dev/null 2>&1; then
+  msb volume create --name "$DOCKER_DATA_VOLUME" --kind disk --size "$DOCKER_DATA_SIZE"
+fi
+
+exec msb run --replace --no-tty --name "$name" \
+  "${secrets[@]}" \
+  --mount-named "${DOCKER_DATA_VOLUME}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
+  "$image" -- "$@"

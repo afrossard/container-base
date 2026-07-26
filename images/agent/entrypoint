@@ -1,0 +1,27 @@
+#!/bin/sh
+# dockerd is this runtime's own daemon, not the host's socket bridged in
+# (ADR-0013), so it starts here, before the command the launcher supplies.
+set -eu
+
+dockerd >/var/log/dockerd.log 2>&1 &
+
+i=0
+while [ ! -S /var/run/docker.sock ]; do
+  i=$((i + 1))
+  if [ "$i" -ge 30 ]; then
+    echo "agent-entrypoint: dockerd did not start within 30s" >&2
+    cat /var/log/dockerd.log >&2
+    exit 1
+  fi
+  sleep 1
+done
+
+# No default command (ADR-0013): the container's lifetime is the task's
+# lifetime, so a missing command is an error rather than a fallback to a
+# standing process like `sleep infinity`.
+if [ "$#" -eq 0 ]; then
+  echo "agent-entrypoint: no command given; the agent runtime has no default command" >&2
+  exit 1
+fi
+
+exec "$@"

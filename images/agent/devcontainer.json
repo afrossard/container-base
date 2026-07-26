@@ -1,0 +1,6 @@
+{
+  "name": "agent",
+  "build": {
+    "dockerfile": "Containerfile"
+  }
+}
