@@ -27,6 +27,12 @@ When set to `yes`, PRs run through the same labels and states as issues, using t
 GitHub shares one number space across issues and PRs, so a bare `#42` may be either.
 Resolve with `gh pr view 42` and fall back to `gh issue view 42`.
 
+## Starting implementation work
+
+Create a feature branch before the first commit; never commit implementation work straight to `main`, regardless of how a skill phrases its own commit step (e.g. `/implement`'s "commit your work to the current branch" means the feature branch, not whatever was checked out when the session started).
+Push the branch and open a PR with `gh pr create` once the work is ready for review.
+Doc-only fixes that a maintainer applies directly (not through an agent session) are the only exception this repo has drawn so far.
+
 ## Merging a PR
 
 `gh pr merge <number> --squash --delete-branch` - squash merge, then delete both the remote and local branch.
