@@ -1,5 +1,9 @@
 # The isolation substrate is a fifth tier, and docker-heavy agent work is confined by a disposable VM
 
+> **Reasoning superseded by [ADR-0013](./0013-the-agent-runtime-is-a-disposable-per-repo-vm.md).**
+> The conclusion below - a disposable VM - still holds, but it is reached from a premise that turned out to be wrong: that the agent runtime is a container on the host with the _host's_ docker socket mounted in.
+> Under ADR-0013 the agent runtime is a VM with its own daemon inside it, so what forces the VM is the daemon, not the socket.
+
 Issue #16's survey of community hardening practices reached mechanism 1, the host docker socket that this repo's own `.devcontainer/devcontainer.json` mounts via `docker-outside-of-docker`.
 That socket is host-root equivalent: an untrusted action running at the agent's privilege can ask the host daemon to launch `docker run --privileged -v /:/host` and own the host, bypassing every launch-tier control (dropped capabilities, `no-new-privileges`, the egress firewall, the non-root user) at once, because the escape is not "break out of this container" but "start a different, privileged one."
 

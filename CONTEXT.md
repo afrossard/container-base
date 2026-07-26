@@ -29,26 +29,30 @@ The tool that owns a language's runtime and resolves which version a project get
 No language runtime is carried at a fixed version; a manager fetches what a project asks for.
 
 **Image tag**:
-`{version}-{variant}`, where variant is `dev` or `{language variant}-prod`.
-For example `1.4.2-dev`, `1.4.2-base-prod`, `1.4.2-python-prod`.
+`{version}-{variant}`, where variant is `dev`, `agent`, or `{language variant}-prod`.
+For example `1.4.2-dev`, `1.4.2-agent`, `1.4.2-base-prod`, `1.4.2-python-prod`.
 
 **Consumer**:
 A repo whose devcontainer or production Containerfile builds FROM one of these images.
 
 **Reference profile**:
-This repo's own `.devcontainer/devcontainer.json`, maintained as the dev image's first consumer.
-It composes launch-time agent hardening - egress firewall, dropped capabilities, no host-secret mounts, a `~/.claude` volume - on top of the dev image, and is both the dogfooding test and the pattern other consumers copy (ADR-0011).
-_Avoid_: hardened image - the hardening is launch-time configuration a consumer composes, not a separate published image.
+This repo's own `.devcontainer/devcontainer.json`, maintained as the dev image's first consumer and the dogfooding test for it.
+It is a recipe for reproducing a dev environment a trusted human works in, not a security boundary; the controls that contain an autonomous agent live in the agent runtime instead (ADR-0013).
+_Avoid_: hardened image - what hardening a consumer wants is launch-time configuration it composes, not a separate published image (ADR-0011).
 
 **Agent runtime**:
-The isolated, hardened environment an autonomous agent executes in - substrate-confined (ADR-0012), sudo-less, headless (no attached editor), default-deny on host reach - as distinct from the dev container a trusted human works in for convenience.
-Still being shaped: close to the reference profile today but not identical to it, and whether it stays in this repo depends on how much it ends up sharing with the dev container.
-_Avoid_: agent sandbox - that is the agent CLI's own in-process confinement (mechanism 7 of the issue #16 survey), a layer inside the runtime, not the runtime itself.
+The disposable virtual machine an autonomous agent executes inside and cannot leave, holding one repo and its own docker daemon and nothing else.
+One exists per agent session, and the repo is its boundary (ADR-0013).
+_Avoid_: agent sandbox, agent container - the first is the agent CLI's own in-process confinement (mechanism 7 of the issue #16 survey), a layer inside the runtime; the second denies the hypervisor boundary that is the whole point.
+
+**Agent session**:
+One unit of autonomous agent work, bounded by the lifetime of the agent runtime it runs in.
+Disposing of the runtime ends the session and everything it accumulated, apart from what was pushed to the remote.
 
 **Isolation substrate**:
-The host or VM a container is launched onto - the boundary that actually contains an escape, one tier below the launch-time configuration that runs inside it.
-For docker-heavy agent work it is a disposable micro VM holding only the assigned workspace and docker, so an escape yields nothing the agent was not already granted (ADR-0012).
-_Avoid_: sandbox - that names the agent CLI's own syscall/filesystem confinement (bubblewrap, seccomp, Seatbelt), a different layer running inside the container, not the boundary underneath it.
+The hypervisor the agent runtime runs as a virtual machine on - the boundary that actually contains an escape.
+Every control inside the runtime is defence-in-depth rather than the boundary, because the agent holds root and the docker socket there by design (ADR-0013).
+_Avoid_: sandbox - that names the agent CLI's own syscall/filesystem confinement (bubblewrap, seccomp, Seatbelt), a different layer running inside the runtime, not the boundary underneath it.
 
 **Dotfiles bootstrap**:
 Applying the user's chezmoi-managed configuration to a container after it starts.
