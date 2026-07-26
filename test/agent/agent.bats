@@ -64,13 +64,32 @@ teardown() {
   [ "$output" = "overlayfs" ]
 }
 
-@test "a real container build and run succeeds inside the guest" {
+@test "a real container run succeeds inside the guest" {
   run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" sh -c '
     set -e
     docker run --rm alpine echo container-ok
   '
   [ "$status" -eq 0 ]
   [[ "$output" == *"container-ok"* ]]
+}
+
+# docs/research/0022's header finding: a trivial pull/run can pass while a
+# real multi-layer build still fails, because nested overlayfs only breaks
+# once a build actually exercises the snapshotter. This fixture is a build,
+# not just a run, for that reason.
+@test "a real multi-layer docker build succeeds inside the guest" {
+  run docker run --rm --privileged \
+    -v "${volume}:/var/lib/docker" \
+    -v "${BATS_TEST_DIRNAME}/fixtures/multilayer:/build:ro" \
+    "$IMAGE" sh -c '
+      set -e
+      docker build -f /build/Containerfile -t multilayer-test /build
+      docker run --rm multilayer-test
+    '
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"layer1"* ]]
+  [[ "$output" == *"layer2"* ]]
+  [[ "$output" == *"layer3"* ]]
 }
 
 @test "tini is PID 1, reaping dockerd" {
