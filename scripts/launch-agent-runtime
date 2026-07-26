@@ -59,24 +59,29 @@
 #                        value (msb itself rejects an inline ENV=VALUE form)
 #   --force              skip the confirmation before replacing a sandbox
 #                        that's currently running (see below)
-#   --persist-claude-auth
-#                        mount a persistent volume for Claude Code's own
-#                        credentials at /home/vscode/.claude, plus a
-#                        separate host file for the sibling
+#   --persist-claude-auth / --no-persist-claude-auth
+#                        mount (or don't) a persistent volume for Claude
+#                        Code's own credentials at /home/vscode/.claude,
+#                        plus a separate host file for the sibling
 #                        /home/vscode/.claude.json - so a completed OAuth
 #                        login survives --replace instead of repeating
-#                        the browser flow every session. A deliberate
-#                        departure from the disposable-VM default
+#                        the browser flow every session. On by default
+#                        exactly when no COMMAND is given (an interactive
+#                        session, the human-driven use this exists for);
+#                        off by default whenever a COMMAND is given,
+#                        since that's ADR-0013's actual disposable-VM
+#                        model - the headless pattern (--secret) doesn't
+#                        need this at all. Either default can be
+#                        overridden explicitly in either direction: force
+#                        it on for a scripted command, or off for an
+#                        interactive session you want to stay truly
+#                        ephemeral. A deliberate departure from the
+#                        disposable-VM default when it's on
 #                        (docs/research/0022's addendum): the credential
 #                        ends up as a plain, readable host file for as
 #                        long as the volume exists, a materially
 #                        different exposure than Docker Desktop's own VM
-#                        disk or macOS Keychain. Off by default - the
-#                        headless pattern (--secret) is what ADR-0013
-#                        actually describes and doesn't need this; this
-#                        flag is for a human driving an interactive
-#                        session (the no-command default above) who
-#                        doesn't want to re-login every time.
+#                        disk or macOS Keychain.
 #
 # --replace silently SIGTERMs (then SIGKILLs after a grace period) a
 # sandbox that's still running, whether or not you meant to end whatever
@@ -135,7 +140,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/agent-runtime.sh"
 image="ghcr.io/afrossard/container-base:0.0.3-agent"
 name=""
 force=0
-persist_claude_auth=0
+persist_claude_auth=""
 secrets=()
 
 # "name<TAB>status" lines for every sandbox tagged with this repo's label
@@ -267,6 +272,10 @@ while [ "$#" -gt 0 ]; do
       persist_claude_auth=1
       shift
       ;;
+    --no-persist-claude-auth)
+      persist_claude_auth=0
+      shift
+      ;;
     --)
       shift
       break
@@ -292,9 +301,14 @@ done
 # scripted, with no tty, as before.
 tty_flag="--no-tty"
 if [ "$#" -eq 0 ]; then
+  # Unset $persist_claude_auth means neither flag was given: default it
+  # here, before $# changes below, since "no command" is exactly the
+  # condition the default depends on.
+  : "${persist_claude_auth:=1}"
   set -- zsh
   tty_flag="-t"
 fi
+: "${persist_claude_auth:=0}"
 
 if [ -z "$name" ]; then
   name=$(resolve_name)
