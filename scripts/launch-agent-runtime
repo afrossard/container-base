@@ -96,28 +96,15 @@
 # footgun found by running this script, not a style choice.
 set -eo pipefail
 
+# shellcheck source=lib/agent-runtime.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/agent-runtime.sh"
+
 : "${DOCKER_DATA_SIZE:=20G}"
 
 image="ghcr.io/afrossard/container-base:0.0.3-agent"
 name=""
 force=0
 secrets=()
-
-usage() {
-  sed -n '/^# Usage:/,/^$/p' "$0" | cut -c3-
-}
-
-repo_name() {
-  local repo
-  if repo=$(git remote get-url origin 2>/dev/null); then
-    repo=$(basename "$repo" .git)
-  elif repo=$(git rev-parse --show-toplevel 2>/dev/null); then
-    repo=$(basename "$repo")
-  else
-    repo=$(basename "$PWD")
-  fi
-  printf '%s' "$repo"
-}
 
 # "name<TAB>status" lines for every sandbox tagged with this repo's label
 # (attached at launch below), not a name-prefix guess - exact rather than

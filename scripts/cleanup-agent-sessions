@@ -37,21 +37,8 @@
 
 set -eo pipefail
 
-repo_name() {
-  local repo
-  if repo=$(git remote get-url origin 2>/dev/null); then
-    repo=$(basename "$repo" .git)
-  elif repo=$(git rev-parse --show-toplevel 2>/dev/null); then
-    repo=$(basename "$repo")
-  else
-    repo=$(basename "$PWD")
-  fi
-  printf '%s' "$repo"
-}
-
-usage() {
-  sed -n '/^# Usage:/,/^$/p' "$0" | cut -c3-
-}
+# shellcheck source=lib/agent-runtime.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/agent-runtime.sh"
 
 dry_run=0
 force=0
