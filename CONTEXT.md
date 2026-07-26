@@ -53,12 +53,18 @@ _Avoid_: agent runtime - that names the running VM this image becomes once launc
 **Launcher**:
 `scripts/launch-agent-runtime`, the host-side script that boots the agent image as a microsandbox guest: a disk-backed volume for `/var/lib/docker` (msb's default nests overlayfs on overlayfs, which fails a real build), `--secret` credential injection, and a repo-derived session name that reuses (replaces) its own prior sandbox.
 The image itself still has no default command; the launcher supplies its own - an interactive shell with a real tty - when none is given, so a bare invocation behaves like `docker run -it` rather than erroring.
+It also composes everything a session needs that the image deliberately does not carry: the workspace clone, the `dotfiles-bootstrap` run that applies the operator's conventions (ADR-0016), and the repository-scoped credential the session pushes with (ADR-0015).
 `scripts/cleanup-agent-sessions` removes stopped sessions and their volumes.
 Both are host-side tooling, not container images - a narrow, documented exception to this repo's image-only scope (ADR-0001, ADR-0014).
 
 **Agent session**:
 One unit of autonomous agent work, bounded by the lifetime of the agent runtime it runs in.
 Disposing of the runtime ends the session and everything it accumulated, apart from what was pushed to the remote.
+
+**Workspace**:
+The clone of one repo an agent session works in, made inside the agent runtime at launch and destroyed with it.
+It enters as a full clone and leaves as a pushed branch, sharing nothing with the operator's own checkout (ADR-0015).
+_Avoid_: checkout, mount - the first names the human's copy on the host, the second names a mechanism this repo rejected because a writable shared path is a channel out of the runtime.
 
 **Isolation substrate**:
 The hypervisor the agent runtime runs as a virtual machine on - the boundary that actually contains an escape.
