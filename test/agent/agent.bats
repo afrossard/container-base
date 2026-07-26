@@ -44,6 +44,22 @@ teardown() {
   [[ "$output" == *"hello"* ]]
 }
 
+# Regression test for a bug this suite previously missed: the entrypoint's
+# own log-filtering step (silencing docker-init.sh's cgroup-nesting noise)
+# wrote its scratch file under /tmp, which docker-init.sh itself remounts
+# as a fresh tmpfs partway through its own setup - wiping the file before
+# the entrypoint could read it back, and leaking a "grep: ... No such file
+# or directory" line into every single invocation. Only ever exercised
+# under msb before, where /tmp happens to already be a mountpoint so the
+# remount (and the bug) never fired; this suite's own docker run is what
+# should have caught it, so this test exists specifically to keep it caught.
+@test "no entrypoint plumbing (grep/log-file errors) leaks into the output" {
+  run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" echo hello
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"No such file or directory"* ]]
+  [[ "$output" != *"grep:"* ]]
+}
+
 @test "the given command runs as vscode, not root, and can reach the docker socket without sudo" {
   run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" id
   [ "$status" -eq 0 ]

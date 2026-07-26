@@ -30,9 +30,14 @@ fi
 # Giving docker-init.sh "true" instead of the real command makes it run
 # its full setup, confirm dockerd is up, exec into "true", and return -
 # letting the one known noisy line be filtered out of its stderr before
-# the real command's own output starts.
-/usr/local/share/docker-init.sh true 2>/tmp/docker-init.stderr.log
-grep -v '^echo: write error: Invalid argument$' /tmp/docker-init.stderr.log >&2 || true
+# the real command's own output starts. The log lives under /var/log, not
+# /tmp: docker-init.sh's own setup remounts /tmp as a fresh tmpfs when it
+# isn't already a mountpoint (true under a plain `docker run`, false under
+# msb, where /tmp is already one) - a file written to the old /tmp before
+# that remount is unreachable by path afterward, found by testing this
+# under plain docker after already trusting the msb-only verification.
+/usr/local/share/docker-init.sh true 2>/var/log/docker-init.stderr.log
+grep -v '^echo: write error: Invalid argument$' /var/log/docker-init.stderr.log >&2 || true
 
 # dockerd itself runs as root; the given command drops to vscode via
 # runuser, since the feature already put vscode in the docker group at
