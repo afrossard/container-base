@@ -1,0 +1,285 @@
+#!/usr/bin/env bash
+# Launches the published -agent image (ADR-0014) as a disposable
+# microsandbox guest (ADR-0013), the recommendation of
+# docs/research/0022-vm-tool-experiment-results.md.
+#
+# This is host-side tooling, not a container image, and is a narrow,
+# deliberate exception to ADR-0001's "this repo publishes shared container
+# images only" scope - recorded as such in ADR-0014.
+#
+# --secret injects a credential without ever placing its real value in the
+# guest's own environment: the guest sees only a placeholder string, and the
+# real value is substituted in-flight, only for traffic to the host it is
+# scoped to (docs/research/0022's addendum, directly verified against the
+# live Anthropic API).
+#
+# The disk-backed --mount-named volume gives /var/lib/docker its own
+# filesystem instead of msb's default, which nests overlayfs on overlayfs
+# and fails any real multi-layer build (docs/research/0022's header
+# finding). The volume is created once, on first use, and reused by every
+# later session - provisioning it per launch would pay disk-format cost on
+# every disposable guest for no reason.
+#
+# The image itself has no default command (ADR-0013's disposable-VM model):
+# a missing command run directly against the image is a usage error, not a
+# fallback to a standing process. This launcher, one level up, does supply
+# its own default when a human runs it bare: an interactive shell with a
+# real tty, matching plain `docker run -it`'s convention - the guest still
+# disposes of itself the moment that shell exits, so it stays a one-shot
+# run, not a standing daemon. An explicit COMMAND still runs non-interactive
+# and scripted, exactly as before.
+#
+# Usage:
+#   scripts/launch-agent-runtime [--name SESSION] [--image REF] \
+#     [--secret ENV@HOST]... [-- COMMAND...]
+#
+#   --name SESSION      sandbox name, forwarded to `msb run --name --replace`.
+#                        Defaults to the repo name (from `git remote get-url
+#                        origin`, falling back to the toplevel directory
+#                        name, falling back to the current directory name
+#                        outside any git repo). Every sandbox this launcher
+#                        creates carries a `repo=<repo-name>` label
+#                        (`msb run --label`), and that label - not a
+#                        name-prefix guess - is what "existing sandbox for
+#                        this repo" means below and in
+#                        scripts/cleanup-agent-sessions. If exactly one
+#                        existing sandbox carries this repo's label, it's
+#                        reused (replaced) rather than creating a new one -
+#                        the point of --replace, not defeated by a random
+#                        suffix. If more than one matches, you're asked
+#                        which one, interactively; --name skips all of
+#                        this and is used exactly as given (but the label
+#                        is still attached, so cleanup can still find it).
+#                        The resolved name is printed before launch and
+#                        always visible via `msb list` after.
+#   --image REF         agent image to launch
+#                        (default: ghcr.io/afrossard/container-base:0.0.3-agent)
+#   --secret ENV@HOST    forwarded verbatim to `msb run --secret` (repeatable);
+#                        ENV is a host environment variable, never a literal
+#                        value (msb itself rejects an inline ENV=VALUE form)
+#   --force              skip the confirmation before replacing a sandbox
+#                        that's currently running (see below)
+#
+# --replace silently SIGTERMs (then SIGKILLs after a grace period) a
+# sandbox that's still running, whether or not you meant to end whatever
+# it was doing - verified directly, not assumed: a live `sleep 300` died
+# in well under a second. Reusing a stopped sandbox is free and safe, so
+# only a currently-running match asks for confirmation (or --force) before
+# it's replaced; a stopped one is reused exactly as before. For a resolved
+# (not explicit --name) match, the prompt also offers a fresh, separate
+# sandbox instead of replacing or aborting - an explicit --name skips
+# straight to replace-or-abort, since a different name is just a
+# different --name away.
+#
+# Environment:
+#   DOCKER_DATA_VOLUME  name of the persistent /var/lib/docker volume
+#                       (default: <session name>-docker-data - see below)
+#   DOCKER_DATA_SIZE    size of that volume (default: 20G)
+#
+# A disk-kind volume can only be attached to one *running* guest at a
+# time - verified directly: a second sandbox trying to attach a volume a
+# running one already holds fails with "already attached with an
+# incompatible disk mode", even though nothing else was touching it. A
+# single global default volume name would make that failure the norm,
+# not the exception, the moment two sessions run at once - not just two
+# sessions of the same repo, but any two sessions on the host, since
+# nothing before scoped it per repo either. Defaulting the volume name to
+# the session's own name keeps replacing a session reusing its own
+# volume (cache preserved across replace cycles) while any genuinely
+# different session - "start a new one", a different repo, a different
+# --name - gets a genuinely separate disk. Still overridable via the
+# environment for deliberate sharing between sessions that will never
+# run concurrently.
+
+# Not -u: macOS ships bash 3.2 (GPLv3 avoidance), where `set -u` treats
+# "${secrets[@]}" as unbound whenever the array is still empty - a real
+# footgun found by running this script, not a style choice.
+set -eo pipefail
+
+# shellcheck source=lib/agent-runtime.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/agent-runtime.sh"
+
+: "${DOCKER_DATA_SIZE:=20G}"
+
+image="ghcr.io/afrossard/container-base:0.0.3-agent"
+name=""
+force=0
+secrets=()
+
+# "name<TAB>status" lines for every sandbox tagged with this repo's label
+# (attached at launch below), not a name-prefix guess - exact rather than
+# "close enough", and what scripts/cleanup-agent-sessions also matches on.
+# Also always checks the bare repo name by exact name, label or not: a
+# sandbox created before this launcher attached labels at all (every
+# sandbox that existed before that commit) is otherwise invisible to the
+# label query, so it silently drops out of the count - found the hard way
+# when it caused resolve_name to treat two existing sandboxes as one,
+# leading "start a new one" to mint a third rather than actually choosing
+# between the two that already existed.
+matching_sandboxes() {
+  {
+    msb list --label "repo=$1" --format json 2>/dev/null | jq -r '.[] | "\(.name)\t\(.status)"'
+    msb list --format json 2>/dev/null | jq -r --arg name "$1" '.[] | select(.name == $name) | "\(.name)\t\(.status)"'
+  } | sort -u
+}
+
+# Empty if no sandbox is named exactly $1 (covers an explicit --name too,
+# which bypasses resolve_name's own matching entirely).
+sandbox_status() {
+  msb list --format json 2>/dev/null | jq -r --arg name "$1" '.[] | select(.name == $name) | .status'
+}
+
+# Refuses to silently replace a currently-running sandbox (see the usage
+# comment above): asks for confirmation, honours --force, and refuses
+# outright rather than hanging if stdin isn't a terminal to ask on. Sets
+# the global $name directly (no subshell/command-substitution - keeps
+# `exit` here able to actually end the whole script, not just a subshell)
+# to a freshly minted alternative if "start a new one instead" is chosen;
+# leaves $name untouched otherwise. That alternative is only offered for
+# a resolved name ($2 = 1) - not for an explicit --name, which the human
+# already chose on purpose, so the only remaining question there is
+# whether to replace it or not.
+confirm_replace_if_running() {
+  local target="$1" offer_new="$2" status choice
+  status=$(sandbox_status "$target")
+  [ "$status" = "Running" ] || return 0
+  [ "$force" = "1" ] && return 0
+
+  if [ ! -t 0 ]; then
+    echo "launch-agent-runtime: '$target' is currently running; pass --force to replace it anyway, or 'msb exec $target' to attach to it instead" >&2
+    exit 1
+  fi
+
+  echo "launch-agent-runtime: '$target' is currently running." >&2
+  if [ "$offer_new" = "1" ]; then
+    read -r -p "Replace it, start a new one instead, or abort? [r/n/A] " choice
+    case "$choice" in
+      r | R) ;;
+      n | N) name=$(printf '%s-%04d' "$(repo_name)" "$((RANDOM % 10000))") ;;
+      *)
+        echo "launch-agent-runtime: aborted" >&2
+        exit 1
+        ;;
+    esac
+  else
+    read -r -p "Replace it anyway? [y/N] " choice
+    case "$choice" in
+      y | Y) ;;
+      *)
+        echo "launch-agent-runtime: aborted" >&2
+        exit 1
+        ;;
+    esac
+  fi
+}
+
+# Resolves the default name against what's already running, rather than
+# picking blind: reuse the one existing sandbox for this repo if there's
+# exactly one (so --replace does its job across repeated invocations,
+# instead of a random suffix defeating it every time); ask which one if
+# there's more than one; only mint a fresh name when there's none yet.
+resolve_name() {
+  local base matches count target choice
+  base=$(repo_name)
+  matches=$(matching_sandboxes "$base")
+
+  if [ -z "$matches" ]; then
+    printf '%s' "$base"
+    return
+  fi
+
+  count=$(printf '%s\n' "$matches" | wc -l | tr -d ' ')
+  if [ "$count" -eq 1 ]; then
+    target=$(printf '%s' "$matches" | cut -f1)
+  else
+    if [ ! -t 0 ]; then
+      echo "launch-agent-runtime: multiple existing sandboxes match '$base' and stdin isn't a terminal to ask; pass --name explicitly:" >&2
+      printf '%s\n' "$matches" | awk -F'\t' '{print "  " $1 " (" $2 ")"}' >&2
+      exit 1
+    fi
+
+    echo "launch-agent-runtime: multiple existing sandboxes match '$base':" >&2
+    printf '%s\n' "$matches" | awk -F'\t' '{print NR") " $1 " (" $2 ")"}' >&2
+    echo "  n) start a new one" >&2
+    read -r -p "Which one? " choice
+
+    if [ "$choice" = "n" ] || [ "$choice" = "N" ]; then
+      printf '%s-%04d' "$base" "$((RANDOM % 10000))"
+      return
+    fi
+    target=$(printf '%s\n' "$matches" | sed -n "${choice}p" | cut -f1)
+  fi
+
+  printf '%s' "$target"
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --name)
+      name="$2"
+      shift 2
+      ;;
+    --image)
+      image="$2"
+      shift 2
+      ;;
+    --secret)
+      secrets+=(--secret "$2")
+      shift 2
+      ;;
+    --force)
+      force=1
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "launch-agent-runtime: unrecognized argument: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+# No command: an interactive shell, with a real tty, is this launcher's own
+# default (not the image's - see the comment block above). zsh, not bash:
+# every zsh invocation sources /etc/zsh/zshenv unconditionally (ADR-0010),
+# which is where the dev image's mise shims and Homebrew shellenv live, so
+# an interactive default shell gets the same PATH a human dev container
+# session would - bash would get none of it. A given command still runs
+# scripted, with no tty, as before.
+tty_flag="--no-tty"
+if [ "$#" -eq 0 ]; then
+  set -- zsh
+  tty_flag="-t"
+fi
+
+if [ -z "$name" ]; then
+  name=$(resolve_name)
+  offer_new=1
+else
+  offer_new=0
+fi
+
+# Applies to an explicit --name too, not just a resolved one - the same
+# silent-kill risk exists either way (see the function's own comment for
+# why "start a new one" is only offered for a resolved name).
+confirm_replace_if_running "$name" "$offer_new"
+echo "launch-agent-runtime: session name: $name" >&2
+
+: "${DOCKER_DATA_VOLUME:=${name}-docker-data}"
+
+if ! msb volume inspect "$DOCKER_DATA_VOLUME" >/dev/null 2>&1; then
+  msb volume create --name "$DOCKER_DATA_VOLUME" --kind disk --size "$DOCKER_DATA_SIZE"
+fi
+
+exec msb run --replace "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
+  "${secrets[@]}" \
+  --mount-named "${DOCKER_DATA_VOLUME}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
+  "$image" -- "$@"

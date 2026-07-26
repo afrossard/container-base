@@ -1,0 +1,5 @@
+FROM alpine
+RUN echo layer1 > /layer1
+RUN echo layer2 > /layer2
+RUN echo layer3 > /layer3
+CMD ["cat", "/layer1", "/layer2", "/layer3"]

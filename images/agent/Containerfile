@@ -1,0 +1,22 @@
+# The agent runtime is a published image variant (ADR-0014), built on the
+# same published dev image every consumer builds on, pinned here the same
+# way .devcontainer/Containerfile pins it so Renovate owns the bump.
+FROM ghcr.io/afrossard/container-base:0.0.3-dev
+
+# The docker-in-docker devcontainer feature (images/agent/devcontainer.json)
+# installs the engine itself - docker-ce, containerd, buildx, and iptables,
+# including its own iptables-legacy/nft alternative selection - so this
+# Containerfile only adds tini, which the feature doesn't carry and which
+# the entrypoint below needs as PID 1 to reap dockerd's orphaned children.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY entrypoint /usr/local/bin/agent-entrypoint
+RUN chmod 0755 /usr/local/bin/agent-entrypoint
+
+# tini as PID 1 reaps dockerd's children; the entrypoint script delegates
+# dockerd's own startup to the feature's docker-init.sh and drops the given
+# command to a non-root user (docs/research/0022's "drop the sleep infinity
+# fallback" still applies - no default command).
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint"]

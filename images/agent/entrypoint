@@ -1,0 +1,47 @@
+#!/bin/sh
+# dockerd is this runtime's own daemon, not the host's socket bridged in
+# (ADR-0013). Its startup (wait-for-socket, cgroup v2 nesting, iptables
+# alternative selection, containerd wiring) is delegated to docker-init.sh,
+# installed by the docker-in-docker feature (images/agent/devcontainer.json)
+# rather than reimplemented here.
+set -eu
+
+# No default command (ADR-0013): the container's lifetime is the task's
+# lifetime, so a missing command is an error rather than a fallback to a
+# standing process like `sleep infinity`. Checked before handing off to
+# docker-init.sh so a missing command fails fast, without waiting on dockerd.
+if [ "$#" -eq 0 ]; then
+  echo "agent-entrypoint: no command given; the agent runtime has no default command" >&2
+  exit 1
+fi
+
+# docker-init.sh's cgroup v2 nesting step (vendored from Moby's own
+# hack/dind) moves every PID already in the root cgroup into a child
+# cgroup, one write() per PID; Moby's own comment already calls a failed
+# move "ignored" (the exit code is `|| :`-masked upstream), but the write
+# failure itself still prints. Under a real nested container that list is
+# just this container's own 1-2 processes, so the move succeeds silently;
+# under a microsandbox guest, the root cgroup also holds msb's own
+# supervisor processes, most of which legitimately can't move, printing
+# one harmless "echo: write error: Invalid argument" line per PID that
+# fails. Traced directly (`sh -x`) rather than assumed - no upstream fix
+# exists for the noise, only for the (already-handled) exit code.
+#
+# Giving docker-init.sh "true" instead of the real command makes it run
+# its full setup, confirm dockerd is up, exec into "true", and return -
+# letting the one known noisy line be filtered out of its stderr before
+# the real command's own output starts. The log lives under /var/log, not
+# /tmp: docker-init.sh's own setup remounts /tmp as a fresh tmpfs when it
+# isn't already a mountpoint (true under a plain `docker run`, false under
+# msb, where /tmp is already one) - a file written to the old /tmp before
+# that remount is unreachable by path afterward, found by testing this
+# under plain docker after already trusting the msb-only verification.
+/usr/local/share/docker-init.sh true 2>/var/log/docker-init.stderr.log
+grep -v '^echo: write error: Invalid argument$' /var/log/docker-init.stderr.log >&2 || true
+
+# dockerd itself runs as root; the given command drops to vscode via
+# runuser, since the feature already put vscode in the docker group at
+# build time. PATH is vscode's plain environment, not the zshenv-sourced
+# login-shell one (runuser -u doesn't run a login shell); a task needing
+# mise/Homebrew tools invokes them itself.
+exec runuser -u vscode -- "$@"

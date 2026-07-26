@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# Removes every stopped agent-runtime sandbox for this repo (or, with
+# --name, just one specific sandbox), along with its paired per-session
+# /var/lib/docker volume (scripts/launch-agent-runtime's own naming:
+# <session-name>-docker-data) - the disk half of a session that nothing
+# else cleans up automatically, now that each session gets its own volume
+# rather than sharing one global default (a stopped sandbox and its volume
+# otherwise just sit there consuming disk space indefinitely).
+#
+# Without --name, matches on the `repo=<repo-name>` label
+# scripts/launch-agent-runtime attaches at launch, the same label it uses
+# for its own matching - not a name-prefix guess. A sandbox created before
+# that label existed, or with a hand-rolled `msb run` bypassing the
+# launcher entirely, won't be found that way; --name targets it directly
+# instead.
+#
+# Never touches a running sandbox unless --force says so: it isn't a
+# stopped one to begin with, so without --name there's nothing here to
+# reconcile with the running-sandbox confirmation the launcher itself
+# already does.
+#
+# Usage:
+#   scripts/cleanup-agent-sessions [--name SESSION] [--dry-run] [--force]
+#
+#   --name SESSION   remove only this one sandbox (and its volume) instead
+#                    of every stopped sandbox for this repo. Doesn't need
+#                    to carry this repo's label - naming it explicitly is
+#                    already deliberate, the same reasoning
+#                    launch-agent-runtime's own --name uses. Still
+#                    refused if it's currently running, unless --force.
+#   --dry-run        list what would be removed, without removing anything
+#                    or asking for confirmation
+#   --force          skip the confirmation prompt (for scripted use); also
+#                    what lets --name remove a currently-running sandbox.
+#                    Refused outright rather than hanging if stdin isn't a
+#                    terminal to ask on and --force wasn't given
+
+set -eo pipefail
+
+# shellcheck source=lib/agent-runtime.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/agent-runtime.sh"
+
+dry_run=0
+force=0
+target_name=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --name)
+      target_name="$2"
+      shift 2
+      ;;
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    --force)
+      force=1
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "cleanup-agent-sessions: unrecognized argument: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+if [ -n "$target_name" ]; then
+  status=$(msb list --format json 2>/dev/null | jq -r --arg name "$target_name" '.[] | select(.name == $name) | .status')
+  if [ -z "$status" ]; then
+    echo "cleanup-agent-sessions: no sandbox named '$target_name'" >&2
+    exit 1
+  fi
+  if [ "$status" = "Running" ] && [ "$force" != "1" ]; then
+    echo "cleanup-agent-sessions: '$target_name' is currently running; pass --force to remove it anyway" >&2
+    exit 1
+  fi
+  targets="$target_name"
+else
+  repo=$(repo_name)
+  targets=$(msb list --label "repo=$repo" --stopped -q 2>/dev/null || true)
+
+  if [ -z "$targets" ]; then
+    echo "cleanup-agent-sessions: no stopped sandboxes for '$repo'" >&2
+    exit 0
+  fi
+fi
+
+echo "cleanup-agent-sessions: sandbox(es) to remove:" >&2
+printf '%s\n' "$targets" | sed 's/^/  /' >&2
+
+if [ "$dry_run" = "1" ]; then
+  echo "cleanup-agent-sessions: --dry-run, nothing removed" >&2
+  exit 0
+fi
+
+if [ "$force" != "1" ]; then
+  if [ ! -t 0 ]; then
+    echo "cleanup-agent-sessions: stdin isn't a terminal to confirm on; pass --force to remove without asking" >&2
+    exit 1
+  fi
+
+  read -r -p "Remove these and their volumes? [y/N] " confirm
+  case "$confirm" in
+    y | Y) ;;
+    *)
+      echo "cleanup-agent-sessions: aborted" >&2
+      exit 1
+      ;;
+  esac
+fi
+
+while IFS= read -r name; do
+  [ -z "$name" ] && continue
+  msb rm -f "$name"
+  # Best-effort: DOCKER_DATA_VOLUME may have been overridden away from the
+  # default at launch time, in which case there's nothing named this to
+  # remove, and that's fine.
+  msb volume remove "${name}-docker-data" >/dev/null 2>&1 || true
+done <<<"$targets"
