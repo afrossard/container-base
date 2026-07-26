@@ -14,6 +14,6 @@ No language runtime is baked: `uv` resolves Python and `mise` resolves everythin
 
 Pin a version and let Renovate bump it.
 
-`scripts/launch-agent-runtime` launches the agent image as a microsandbox guest - host-side tooling, and a deliberate, narrow exception to this repo's image-only scope (ADR-0014).
+`scripts/launch-agent-runtime` launches the agent image as a microsandbox guest - host-side tooling, and a deliberate, narrow exception to this repo's image-only scope (ADR-0014). `scripts/cleanup-agent-sessions` removes stopped sessions for the current repo and their disk volumes.
 
 See [`CONTEXT.md`](./CONTEXT.md) for the glossary and [`docs/adr/`](./docs/adr/) for why it's shaped this way.
