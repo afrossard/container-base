@@ -34,16 +34,18 @@
 #     [--secret ENV@HOST]... [-- COMMAND...]
 #
 #   --name SESSION      sandbox name, forwarded to `msb run --name --replace`.
-#                        Defaults to <repo-name>-<random 4 digits> (the repo
-#                        name from `git remote get-url origin`, falling back
-#                        to the toplevel directory name, falling back to the
-#                        current directory name outside any git repo) - the
-#                        random suffix keeps two concurrent sessions on the
-#                        same repo from colliding under --replace, which
-#                        would otherwise kill one session's guest out from
-#                        under it. The resolved name is printed before
-#                        launch and always visible via `msb list` after,
-#                        so nothing about it needs to be remembered.
+#                        Defaults to the repo name (from `git remote get-url
+#                        origin`, falling back to the toplevel directory
+#                        name, falling back to the current directory name
+#                        outside any git repo). If exactly one existing
+#                        sandbox already matches that name, it's reused
+#                        (replaced) rather than creating a new one - the
+#                        point of --replace, not defeated by a random
+#                        suffix. If more than one matches, you're asked
+#                        which one, interactively; --name skips all of
+#                        this and is used exactly as given. The resolved
+#                        name is printed before launch and always visible
+#                        via `msb list` after.
 #   --image REF         agent image to launch
 #                        (default: ghcr.io/afrossard/container-base:0.0.3-agent)
 #   --secret ENV@HOST    forwarded verbatim to `msb run --secret` (repeatable);
@@ -71,7 +73,7 @@ usage() {
   sed -n '/^# Usage:/,/^$/p' "$0" | cut -c3-
 }
 
-default_name() {
+repo_name() {
   local repo
   if repo=$(git remote get-url origin 2>/dev/null); then
     repo=$(basename "$repo" .git)
@@ -80,7 +82,46 @@ default_name() {
   else
     repo=$(basename "$PWD")
   fi
-  printf '%s-%04d' "$repo" "$((RANDOM % 10000))"
+  printf '%s' "$repo"
+}
+
+# Resolves the default name against what's already running, rather than
+# picking blind: reuse the one existing sandbox for this repo if there's
+# exactly one (so --replace does its job across repeated invocations,
+# instead of a random suffix defeating it every time); ask which one if
+# there's more than one; only mint a fresh name when there's none yet.
+resolve_name() {
+  local base existing count choice
+  base=$(repo_name)
+  existing=$(msb list -q 2>/dev/null | grep -E "^${base}(-.*)?\$" || true)
+
+  if [ -z "$existing" ]; then
+    printf '%s' "$base"
+    return
+  fi
+
+  count=$(printf '%s\n' "$existing" | wc -l | tr -d ' ')
+  if [ "$count" -eq 1 ]; then
+    printf '%s' "$existing"
+    return
+  fi
+
+  if [ ! -t 0 ]; then
+    echo "launch-agent-runtime: multiple existing sandboxes match '$base' and stdin isn't a terminal to ask; pass --name explicitly:" >&2
+    printf '%s\n' "$existing" >&2
+    exit 1
+  fi
+
+  echo "launch-agent-runtime: multiple existing sandboxes match '$base':" >&2
+  printf '%s\n' "$existing" | nl -w2 -s') ' >&2
+  echo "  n) start a new one" >&2
+  read -r -p "Which one? " choice
+
+  if [ "$choice" = "n" ] || [ "$choice" = "N" ]; then
+    printf '%s-%04d' "$base" "$((RANDOM % 10000))"
+    return
+  fi
+  printf '%s\n' "$existing" | sed -n "${choice}p"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -127,7 +168,7 @@ if [ "$#" -eq 0 ]; then
 fi
 
 if [ -z "$name" ]; then
-  name=$(default_name)
+  name=$(resolve_name)
 fi
 echo "launch-agent-runtime: session name: $name" >&2
 
