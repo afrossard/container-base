@@ -15,11 +15,28 @@ if [ "$#" -eq 0 ]; then
   exit 1
 fi
 
-# dockerd itself runs as root (docker-init.sh execs under this script's own
-# uid). The given command drops to vscode via runuser once the daemon is
-# up, rather than running the task as root too - the feature already put
-# vscode in the docker group at build time, so it reaches the socket
-# without needing root itself. PATH is vscode's plain environment, not the
-# zshenv-sourced login-shell one (runuser -u doesn't run a login shell); a
-# task needing mise/Homebrew tools invokes them itself.
-exec /usr/local/share/docker-init.sh runuser -u vscode -- "$@"
+# docker-init.sh's cgroup v2 nesting step (vendored from Moby's own
+# hack/dind) moves every PID already in the root cgroup into a child
+# cgroup, one write() per PID; Moby's own comment already calls a failed
+# move "ignored" (the exit code is `|| :`-masked upstream), but the write
+# failure itself still prints. Under a real nested container that list is
+# just this container's own 1-2 processes, so the move succeeds silently;
+# under a microsandbox guest, the root cgroup also holds msb's own
+# supervisor processes, most of which legitimately can't move, printing
+# one harmless "echo: write error: Invalid argument" line per PID that
+# fails. Traced directly (`sh -x`) rather than assumed - no upstream fix
+# exists for the noise, only for the (already-handled) exit code.
+#
+# Giving docker-init.sh "true" instead of the real command makes it run
+# its full setup, confirm dockerd is up, exec into "true", and return -
+# letting the one known noisy line be filtered out of its stderr before
+# the real command's own output starts.
+/usr/local/share/docker-init.sh true 2>/tmp/docker-init.stderr.log
+grep -v '^echo: write error: Invalid argument$' /tmp/docker-init.stderr.log >&2 || true
+
+# dockerd itself runs as root; the given command drops to vscode via
+# runuser, since the feature already put vscode in the docker group at
+# build time. PATH is vscode's plain environment, not the zshenv-sourced
+# login-shell one (runuser -u doesn't run a login shell); a task needing
+# mise/Homebrew tools invokes them itself.
+exec runuser -u vscode -- "$@"
