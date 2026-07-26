@@ -53,7 +53,7 @@
 #                        The resolved name is printed before launch and
 #                        always visible via `msb list` after.
 #   --image REF         agent image to launch
-#                        (default: ghcr.io/afrossard/container-base:0.0.3-agent)
+#                        (default: ghcr.io/afrossard/container-base:0.0.5-agent)
 #   --secret ENV@HOST    forwarded verbatim to `msb run --secret` (repeatable);
 #                        ENV is a host environment variable, never a literal
 #                        value (msb itself rejects an inline ENV=VALUE form)
@@ -144,7 +144,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/agent-runtime.sh"
 
 : "${DOCKER_DATA_SIZE:=20G}"
 
-image="ghcr.io/afrossard/container-base:0.0.3-agent"
+image="ghcr.io/afrossard/container-base:0.0.5-agent"
 name=""
 force=0
 persist_claude_auth=""
