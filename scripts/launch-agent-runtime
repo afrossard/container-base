@@ -51,6 +51,15 @@
 #   --secret ENV@HOST    forwarded verbatim to `msb run --secret` (repeatable);
 #                        ENV is a host environment variable, never a literal
 #                        value (msb itself rejects an inline ENV=VALUE form)
+#   --force              skip the confirmation before replacing a sandbox
+#                        that's currently running (see below)
+#
+# --replace silently SIGTERMs (then SIGKILLs after a grace period) a
+# sandbox that's still running, whether or not you meant to end whatever
+# it was doing - verified directly, not assumed: a live `sleep 300` died
+# in well under a second. Reusing a stopped sandbox is free and safe, so
+# only a currently-running match asks for confirmation (or --force) before
+# it's replaced; a stopped one is reused exactly as before.
 #
 # Environment:
 #   DOCKER_DATA_VOLUME  name of the persistent /var/lib/docker volume
@@ -67,6 +76,7 @@ set -eo pipefail
 
 image="ghcr.io/afrossard/container-base:0.0.3-agent"
 name=""
+force=0
 secrets=()
 
 usage() {
@@ -85,43 +95,81 @@ repo_name() {
   printf '%s' "$repo"
 }
 
+# "name<TAB>status" lines for every sandbox matching $1, one per line.
+matching_sandboxes() {
+  msb list --format json 2>/dev/null | jq -r --arg base "$1" '
+    .[] | select(.name == $base or (.name | startswith($base + "-"))) | "\(.name)\t\(.status)"
+  '
+}
+
+# Empty if no sandbox is named exactly $1 (covers an explicit --name too,
+# which bypasses resolve_name's own matching entirely).
+sandbox_status() {
+  msb list --format json 2>/dev/null | jq -r --arg name "$1" '.[] | select(.name == $name) | .status'
+}
+
+# Refuses to silently replace a currently-running sandbox (see the usage
+# comment above): asks for confirmation, honours --force, and refuses
+# outright rather than hanging if stdin isn't a terminal to ask on.
+confirm_replace_if_running() {
+  local target="$1" status="$2"
+  [ "$status" = "Running" ] || return 0
+  [ "$force" = "1" ] && return 0
+
+  if [ ! -t 0 ]; then
+    echo "launch-agent-runtime: '$target' is currently running; pass --force to replace it anyway, or 'msb exec $target' to attach to it instead" >&2
+    exit 1
+  fi
+
+  echo "launch-agent-runtime: '$target' is currently running." >&2
+  read -r -p "Replace it anyway? [y/N] " confirm
+  case "$confirm" in
+    y | Y) ;;
+    *)
+      echo "launch-agent-runtime: aborted" >&2
+      exit 1
+      ;;
+  esac
+}
+
 # Resolves the default name against what's already running, rather than
 # picking blind: reuse the one existing sandbox for this repo if there's
 # exactly one (so --replace does its job across repeated invocations,
 # instead of a random suffix defeating it every time); ask which one if
 # there's more than one; only mint a fresh name when there's none yet.
 resolve_name() {
-  local base existing count choice
+  local base matches count target choice
   base=$(repo_name)
-  existing=$(msb list -q 2>/dev/null | grep -E "^${base}(-.*)?\$" || true)
+  matches=$(matching_sandboxes "$base")
 
-  if [ -z "$existing" ]; then
+  if [ -z "$matches" ]; then
     printf '%s' "$base"
     return
   fi
 
-  count=$(printf '%s\n' "$existing" | wc -l | tr -d ' ')
+  count=$(printf '%s\n' "$matches" | wc -l | tr -d ' ')
   if [ "$count" -eq 1 ]; then
-    printf '%s' "$existing"
-    return
+    target=$(printf '%s' "$matches" | cut -f1)
+  else
+    if [ ! -t 0 ]; then
+      echo "launch-agent-runtime: multiple existing sandboxes match '$base' and stdin isn't a terminal to ask; pass --name explicitly:" >&2
+      printf '%s\n' "$matches" | awk -F'\t' '{print "  " $1 " (" $2 ")"}' >&2
+      exit 1
+    fi
+
+    echo "launch-agent-runtime: multiple existing sandboxes match '$base':" >&2
+    printf '%s\n' "$matches" | awk -F'\t' '{print NR") " $1 " (" $2 ")"}' >&2
+    echo "  n) start a new one" >&2
+    read -r -p "Which one? " choice
+
+    if [ "$choice" = "n" ] || [ "$choice" = "N" ]; then
+      printf '%s-%04d' "$base" "$((RANDOM % 10000))"
+      return
+    fi
+    target=$(printf '%s\n' "$matches" | sed -n "${choice}p" | cut -f1)
   fi
 
-  if [ ! -t 0 ]; then
-    echo "launch-agent-runtime: multiple existing sandboxes match '$base' and stdin isn't a terminal to ask; pass --name explicitly:" >&2
-    printf '%s\n' "$existing" >&2
-    exit 1
-  fi
-
-  echo "launch-agent-runtime: multiple existing sandboxes match '$base':" >&2
-  printf '%s\n' "$existing" | nl -w2 -s') ' >&2
-  echo "  n) start a new one" >&2
-  read -r -p "Which one? " choice
-
-  if [ "$choice" = "n" ] || [ "$choice" = "N" ]; then
-    printf '%s-%04d' "$base" "$((RANDOM % 10000))"
-    return
-  fi
-  printf '%s\n' "$existing" | sed -n "${choice}p"
+  printf '%s' "$target"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -137,6 +185,10 @@ while [ "$#" -gt 0 ]; do
     --secret)
       secrets+=(--secret "$2")
       shift 2
+      ;;
+    --force)
+      force=1
+      shift
       ;;
     --)
       shift
@@ -171,6 +223,10 @@ if [ -z "$name" ]; then
   name=$(resolve_name)
 fi
 echo "launch-agent-runtime: session name: $name" >&2
+
+# Applies to an explicit --name too, not just a resolved one - the same
+# silent-kill risk exists either way.
+confirm_replace_if_running "$name" "$(sandbox_status "$name")"
 
 if ! msb volume inspect "$DOCKER_DATA_VOLUME" >/dev/null 2>&1; then
   msb volume create --name "$DOCKER_DATA_VOLUME" --kind disk --size "$DOCKER_DATA_SIZE"
