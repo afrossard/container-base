@@ -41,6 +41,15 @@ Both scripts share `repo_name()`/`usage()` via `scripts/lib/agent-runtime.sh`.
 CI (`.github/workflows/agent-image.yml`) builds and tests the `-agent` image the same way `dev-image.yml` does, and both publish workflows now skip a variant's rebuild entirely if its own `images/*` directory didn't change since the previous tag (`.github/scripts/changed-since-last-tag.sh`, ADR-0004), verified on a real tag where neither variant had changed and both correctly skipped.
 README.md and CONTEXT.md describe three published variants; `0.0.4-agent` is the first real published `-agent` image.
 
+With the image and the launcher in place, a grilling session settled how the runtime is actually used, producing three ADRs and the issue backlog that implements them.
+ADR-0017 records the shape being built first: an attended session, a human at the keyboard driving Claude Code in auto mode inside the guest, with the headless shape ADR-0013 describes as the destination rather than an abandoned option - so the launcher's interactive affordances (persisted credentials, sandbox reuse, replace/abort prompts) are deliberate rather than drift from the disposable-VM model.
+It also records why auto mode rather than `--dangerously-skip-permissions`: the VM bounds host damage completely and bounds nothing about the GitHub credential and open network a session is deliberately handed, so the two controls cover disjoint risks.
+ADR-0015 settles the workspace question ADR-0013 left provisional - a full clone made inside the guest, work leaving as a pushed branch and a pull request, and a fine-grained token scoped to the one repository the runtime already holds, injected via `--secret` so the guest never holds its real value.
+Bind mounts are rejected there with evidence rather than by inheritance: `core.hooksPath` is `.husky/_`, in the working tree, so even a mount excluding `.git` hands over host command execution, and a `git worktree` is worse, since `git rev-parse --git-path hooks` resolves to the main checkout's hooks and the worktree's `.git` holds an absolute host path.
+ADR-0016 records that the runtime runs `dotfiles-bootstrap` every session, trading reproducibility for the conventions the operator's global `AGENTS.md` carries and this repo's does not.
+A ruleset on `main` (issue #31) is applied and verified by demonstration - a direct push with the repo owner's own credential is rejected, which settles the repository-scoped-token case by implication since a token holds strictly less authority.
+Issues #30 and #32 through #37 carry the remaining implementation; #34's experiment, whether `--secret` substitution survives `git push`'s Basic-auth base64 encoding, is the one that could still move the design, since a failure there puts real SSH key material in guest storage.
+
 ## Known consumers pending migration
 
 These repos currently build FROM upstream images directly and hand-roll the setup this repo now owns. Once the dev image is published, migrate each devcontainer to `FROM ghcr.io/afrossard/container-base:<version>-dev`:
