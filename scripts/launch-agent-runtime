@@ -59,7 +59,11 @@
 # it was doing - verified directly, not assumed: a live `sleep 300` died
 # in well under a second. Reusing a stopped sandbox is free and safe, so
 # only a currently-running match asks for confirmation (or --force) before
-# it's replaced; a stopped one is reused exactly as before.
+# it's replaced; a stopped one is reused exactly as before. For a resolved
+# (not explicit --name) match, the prompt also offers a fresh, separate
+# sandbox instead of replacing or aborting - an explicit --name skips
+# straight to replace-or-abort, since a different name is just a
+# different --name away.
 #
 # Environment:
 #   DOCKER_DATA_VOLUME  name of the persistent /var/lib/docker volume
@@ -110,9 +114,17 @@ sandbox_status() {
 
 # Refuses to silently replace a currently-running sandbox (see the usage
 # comment above): asks for confirmation, honours --force, and refuses
-# outright rather than hanging if stdin isn't a terminal to ask on.
+# outright rather than hanging if stdin isn't a terminal to ask on. Sets
+# the global $name directly (no subshell/command-substitution - keeps
+# `exit` here able to actually end the whole script, not just a subshell)
+# to a freshly minted alternative if "start a new one instead" is chosen;
+# leaves $name untouched otherwise. That alternative is only offered for
+# a resolved name ($2 = 1) - not for an explicit --name, which the human
+# already chose on purpose, so the only remaining question there is
+# whether to replace it or not.
 confirm_replace_if_running() {
-  local target="$1" status="$2"
+  local target="$1" offer_new="$2" status choice
+  status=$(sandbox_status "$target")
   [ "$status" = "Running" ] || return 0
   [ "$force" = "1" ] && return 0
 
@@ -122,14 +134,26 @@ confirm_replace_if_running() {
   fi
 
   echo "launch-agent-runtime: '$target' is currently running." >&2
-  read -r -p "Replace it anyway? [y/N] " confirm
-  case "$confirm" in
-    y | Y) ;;
-    *)
-      echo "launch-agent-runtime: aborted" >&2
-      exit 1
-      ;;
-  esac
+  if [ "$offer_new" = "1" ]; then
+    read -r -p "Replace it, start a new one instead, or abort? [r/n/A] " choice
+    case "$choice" in
+      r | R) ;;
+      n | N) name=$(printf '%s-%04d' "$(repo_name)" "$((RANDOM % 10000))") ;;
+      *)
+        echo "launch-agent-runtime: aborted" >&2
+        exit 1
+        ;;
+    esac
+  else
+    read -r -p "Replace it anyway? [y/N] " choice
+    case "$choice" in
+      y | Y) ;;
+      *)
+        echo "launch-agent-runtime: aborted" >&2
+        exit 1
+        ;;
+    esac
+  fi
 }
 
 # Resolves the default name against what's already running, rather than
@@ -221,12 +245,16 @@ fi
 
 if [ -z "$name" ]; then
   name=$(resolve_name)
+  offer_new=1
+else
+  offer_new=0
 fi
-echo "launch-agent-runtime: session name: $name" >&2
 
 # Applies to an explicit --name too, not just a resolved one - the same
-# silent-kill risk exists either way.
-confirm_replace_if_running "$name" "$(sandbox_status "$name")"
+# silent-kill risk exists either way (see the function's own comment for
+# why "start a new one" is only offered for a resolved name).
+confirm_replace_if_running "$name" "$offer_new"
+echo "launch-agent-runtime: session name: $name" >&2
 
 if ! msb volume inspect "$DOCKER_DATA_VOLUME" >/dev/null 2>&1; then
   msb volume create --name "$DOCKER_DATA_VOLUME" --kind disk --size "$DOCKER_DATA_SIZE"
