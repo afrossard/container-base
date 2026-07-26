@@ -25,10 +25,20 @@
 # not a fallback to a standing process.
 #
 # Usage:
-#   scripts/launch-agent-runtime --name SESSION [--image REF] \
+#   scripts/launch-agent-runtime [--name SESSION] [--image REF] \
 #     [--secret ENV@HOST]... -- COMMAND...
 #
-#   --name SESSION      sandbox name, forwarded to `msb run --name --replace`
+#   --name SESSION      sandbox name, forwarded to `msb run --name --replace`.
+#                        Defaults to <repo-name>-<random 4 digits> (the repo
+#                        name from `git remote get-url origin`, falling back
+#                        to the toplevel directory name, falling back to the
+#                        current directory name outside any git repo) - the
+#                        random suffix keeps two concurrent sessions on the
+#                        same repo from colliding under --replace, which
+#                        would otherwise kill one session's guest out from
+#                        under it. The resolved name is printed before
+#                        launch and always visible via `msb list` after,
+#                        so nothing about it needs to be remembered.
 #   --image REF         agent image to launch
 #                        (default: ghcr.io/afrossard/container-base:0.0.3-agent)
 #   --secret ENV@HOST    forwarded verbatim to `msb run --secret` (repeatable);
@@ -54,6 +64,18 @@ secrets=()
 
 usage() {
   sed -n '/^# Usage:/,/^$/p' "$0" | cut -c3-
+}
+
+default_name() {
+  local repo
+  if repo=$(git remote get-url origin 2>/dev/null); then
+    repo=$(basename "$repo" .git)
+  elif repo=$(git rev-parse --show-toplevel 2>/dev/null); then
+    repo=$(basename "$repo")
+  else
+    repo=$(basename "$PWD")
+  fi
+  printf '%s-%04d' "$repo" "$((RANDOM % 10000))"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -86,16 +108,15 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-if [ -z "$name" ]; then
-  echo "launch-agent-runtime: --name is required" >&2
-  usage
-  exit 1
-fi
-
 if [ "$#" -eq 0 ]; then
   echo "launch-agent-runtime: a command is required after --; the agent runtime has no default command (ADR-0013)" >&2
   exit 1
 fi
+
+if [ -z "$name" ]; then
+  name=$(default_name)
+fi
+echo "launch-agent-runtime: session name: $name" >&2
 
 if ! msb volume inspect "$DOCKER_DATA_VOLUME" >/dev/null 2>&1; then
   msb volume create --name "$DOCKER_DATA_VOLUME" --kind disk --size "$DOCKER_DATA_SIZE"
