@@ -37,15 +37,21 @@
 #                        Defaults to the repo name (from `git remote get-url
 #                        origin`, falling back to the toplevel directory
 #                        name, falling back to the current directory name
-#                        outside any git repo). If exactly one existing
-#                        sandbox already matches that name, it's reused
-#                        (replaced) rather than creating a new one - the
-#                        point of --replace, not defeated by a random
+#                        outside any git repo). Every sandbox this launcher
+#                        creates carries a `repo=<repo-name>` label
+#                        (`msb run --label`), and that label - not a
+#                        name-prefix guess - is what "existing sandbox for
+#                        this repo" means below and in
+#                        scripts/cleanup-agent-sessions. If exactly one
+#                        existing sandbox carries this repo's label, it's
+#                        reused (replaced) rather than creating a new one -
+#                        the point of --replace, not defeated by a random
 #                        suffix. If more than one matches, you're asked
 #                        which one, interactively; --name skips all of
-#                        this and is used exactly as given. The resolved
-#                        name is printed before launch and always visible
-#                        via `msb list` after.
+#                        this and is used exactly as given (but the label
+#                        is still attached, so cleanup can still find it).
+#                        The resolved name is printed before launch and
+#                        always visible via `msb list` after.
 #   --image REF         agent image to launch
 #                        (default: ghcr.io/afrossard/container-base:0.0.3-agent)
 #   --secret ENV@HOST    forwarded verbatim to `msb run --secret` (repeatable);
@@ -113,11 +119,11 @@ repo_name() {
   printf '%s' "$repo"
 }
 
-# "name<TAB>status" lines for every sandbox matching $1, one per line.
+# "name<TAB>status" lines for every sandbox tagged with this repo's label
+# (attached at launch below), not a name-prefix guess - exact rather than
+# "close enough", and what scripts/cleanup-agent-sessions also matches on.
 matching_sandboxes() {
-  msb list --format json 2>/dev/null | jq -r --arg base "$1" '
-    .[] | select(.name == $base or (.name | startswith($base + "-"))) | "\(.name)\t\(.status)"
-  '
+  msb list --label "repo=$1" --format json 2>/dev/null | jq -r '.[] | "\(.name)\t\(.status)"'
 }
 
 # Empty if no sandbox is named exactly $1 (covers an explicit --name too,
@@ -276,7 +282,7 @@ if ! msb volume inspect "$DOCKER_DATA_VOLUME" >/dev/null 2>&1; then
   msb volume create --name "$DOCKER_DATA_VOLUME" --kind disk --size "$DOCKER_DATA_SIZE"
 fi
 
-exec msb run --replace "$tty_flag" --name "$name" \
+exec msb run --replace "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
   "${secrets[@]}" \
   --mount-named "${DOCKER_DATA_VOLUME}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
   "$image" -- "$@"

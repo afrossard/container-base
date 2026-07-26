@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Removes every stopped agent-runtime sandbox for this repo, along with its
+# paired per-session /var/lib/docker volume (scripts/launch-agent-runtime's
+# own naming: <session-name>-docker-data) - the disk half of a session that
+# nothing else cleans up automatically, now that each session gets its own
+# volume rather than sharing one global default (a stopped sandbox and its
+# volume otherwise just sit there consuming disk space indefinitely).
+#
+# Matches on the `repo=<repo-name>` label scripts/launch-agent-runtime
+# attaches at launch, the same label it uses for its own matching - not a
+# name-prefix guess. A sandbox created before that label existed, or with a
+# hand-rolled `msb run` bypassing the launcher entirely, won't be found;
+# `msb rm -f <name>` and `msb volume remove <name>-docker-data` by hand for
+# those.
+#
+# Never touches a running sandbox: it isn't a stopped one to begin with, so
+# there's nothing here to reconcile with the running-sandbox confirmation
+# the launcher itself already does.
+#
+# Usage:
+#   scripts/cleanup-agent-sessions [--dry-run]
+#
+#   --dry-run   list what would be removed, without removing anything
+
+set -eo pipefail
+
+repo_name() {
+  local repo
+  if repo=$(git remote get-url origin 2>/dev/null); then
+    repo=$(basename "$repo" .git)
+  elif repo=$(git rev-parse --show-toplevel 2>/dev/null); then
+    repo=$(basename "$repo")
+  else
+    repo=$(basename "$PWD")
+  fi
+  printf '%s' "$repo"
+}
+
+usage() {
+  sed -n '/^# Usage:/,/^$/p' "$0" | cut -c3-
+}
+
+dry_run=0
+case "${1:-}" in
+  --dry-run)
+    dry_run=1
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  "") ;;
+  *)
+    echo "cleanup-agent-sessions: unrecognized argument: $1" >&2
+    usage
+    exit 1
+    ;;
+esac
+
+repo=$(repo_name)
+stopped=$(msb list --label "repo=$repo" --stopped -q 2>/dev/null || true)
+
+if [ -z "$stopped" ]; then
+  echo "cleanup-agent-sessions: no stopped sandboxes for '$repo'" >&2
+  exit 0
+fi
+
+echo "cleanup-agent-sessions: stopped sandboxes for '$repo':" >&2
+printf '%s\n' "$stopped" | sed 's/^/  /' >&2
+
+if [ "$dry_run" = "1" ]; then
+  echo "cleanup-agent-sessions: --dry-run, nothing removed" >&2
+  exit 0
+fi
+
+while IFS= read -r name; do
+  [ -z "$name" ] && continue
+  msb rm -f "$name"
+  # Best-effort: DOCKER_DATA_VOLUME may have been overridden away from the
+  # default at launch time, in which case there's nothing named this to
+  # remove, and that's fine.
+  msb volume remove "${name}-docker-data" >/dev/null 2>&1 || true
+done <<<"$stopped"
