@@ -51,8 +51,10 @@ It is the artifact a per-container-VM tool boots directly as a VM guest (ADR-001
 _Avoid_: agent runtime - that names the running VM this image becomes once launched, not the artifact GHCR holds.
 
 **Launcher**:
-`scripts/launch-agent-runtime`, the host-side script that boots the agent image as a microsandbox guest: a disk-backed volume for `/var/lib/docker` (msb's default nests overlayfs on overlayfs, which fails a real build), `--secret` credential injection, and no default command.
-Host-side tooling, not a container image - a narrow, documented exception to this repo's image-only scope (ADR-0001, ADR-0014).
+`scripts/launch-agent-runtime`, the host-side script that boots the agent image as a microsandbox guest: a disk-backed volume for `/var/lib/docker` (msb's default nests overlayfs on overlayfs, which fails a real build), `--secret` credential injection, and a repo-derived session name that reuses (replaces) its own prior sandbox.
+The image itself still has no default command; the launcher supplies its own - an interactive shell with a real tty - when none is given, so a bare invocation behaves like `docker run -it` rather than erroring.
+`scripts/cleanup-agent-sessions` removes stopped sessions and their volumes.
+Both are host-side tooling, not container images - a narrow, documented exception to this repo's image-only scope (ADR-0001, ADR-0014).
 
 **Agent session**:
 One unit of autonomous agent work, bounded by the lifetime of the agent runtime it runs in.
