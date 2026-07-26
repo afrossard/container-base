@@ -10,7 +10,21 @@ permissions:
   packages: write
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: check
+        run: echo "changed=$(.github/scripts/changed-since-last-tag.sh images/dev "${{ github.ref_name }}")" >> "$GITHUB_OUTPUT"
+
   publish:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
     runs-on: ubuntu-latest
     env:
       IMAGE: ghcr.io/afrossard/container-base:${{ github.ref_name }}-dev
