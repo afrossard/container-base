@@ -109,8 +109,18 @@ secrets=()
 # "name<TAB>status" lines for every sandbox tagged with this repo's label
 # (attached at launch below), not a name-prefix guess - exact rather than
 # "close enough", and what scripts/cleanup-agent-sessions also matches on.
+# Also always checks the bare repo name by exact name, label or not: a
+# sandbox created before this launcher attached labels at all (every
+# sandbox that existed before that commit) is otherwise invisible to the
+# label query, so it silently drops out of the count - found the hard way
+# when it caused resolve_name to treat two existing sandboxes as one,
+# leading "start a new one" to mint a third rather than actually choosing
+# between the two that already existed.
 matching_sandboxes() {
-  msb list --label "repo=$1" --format json 2>/dev/null | jq -r '.[] | "\(.name)\t\(.status)"'
+  {
+    msb list --label "repo=$1" --format json 2>/dev/null | jq -r '.[] | "\(.name)\t\(.status)"'
+    msb list --format json 2>/dev/null | jq -r --arg name "$1" '.[] | select(.name == $name) | "\(.name)\t\(.status)"'
+  } | sort -u
 }
 
 # Empty if no sandbox is named exactly $1 (covers an explicit --name too,
