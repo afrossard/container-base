@@ -248,7 +248,11 @@ Its own maintainers also state the argument against it for this threat model: Sy
 Both are Linux-only, so neither is available on the macOS dev host in any case.
 Either is worth layering _inside_ a VM-backed runtime for the same reason `cap_drop` is: cheap and additive.
 
-## The deciding experiment
+## The deciding experiment - resolved
+
+**Update: the experiment ran. See `docs/research/0022-vm-tool-experiment-results.md` for the full results; this section is left as it was written, as the record of what the experiment set out to answer.**
+
+The short version: a full docker daemon runs inside the guest for all three candidates, so the recommendation below is superseded by an unconditional one in 0022, not by the conditional form still written here.
 
 **Does a full docker daemon run inside an `apple/container` guest?**
 
@@ -273,7 +277,9 @@ Shape of the test:
 A clean pass on either OCI-native arm makes that arm the recommendation.
 A failure not fixable from inside the image demotes that arm to a watch item, with its OCI-native argument waiting for whenever guest support broadens, and Lima takes the recommendation by default.
 
-## Recommendation
+## Recommendation - superseded
+
+**This section's conditional form ("adopt whichever candidate survives the experiment") is superseded by the unconditional recommendation in `docs/research/0022-vm-tool-experiment-results.md`: adopt microsandbox, launched with a disk-backed named volume mounted at `/var/lib/docker`, with `apple/container` as the documented fallback and Lima as the last resort.** The text below is left as originally written, as the reasoning that was available before the experiment ran.
 
 ### macOS dev host
 
