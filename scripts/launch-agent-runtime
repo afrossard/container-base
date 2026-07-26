@@ -67,15 +67,29 @@
 #
 # Environment:
 #   DOCKER_DATA_VOLUME  name of the persistent /var/lib/docker volume
-#                       (default: agent-docker-data)
+#                       (default: <session name>-docker-data - see below)
 #   DOCKER_DATA_SIZE    size of that volume (default: 20G)
+#
+# A disk-kind volume can only be attached to one *running* guest at a
+# time - verified directly: a second sandbox trying to attach a volume a
+# running one already holds fails with "already attached with an
+# incompatible disk mode", even though nothing else was touching it. A
+# single global default volume name would make that failure the norm,
+# not the exception, the moment two sessions run at once - not just two
+# sessions of the same repo, but any two sessions on the host, since
+# nothing before scoped it per repo either. Defaulting the volume name to
+# the session's own name keeps replacing a session reusing its own
+# volume (cache preserved across replace cycles) while any genuinely
+# different session - "start a new one", a different repo, a different
+# --name - gets a genuinely separate disk. Still overridable via the
+# environment for deliberate sharing between sessions that will never
+# run concurrently.
 
 # Not -u: macOS ships bash 3.2 (GPLv3 avoidance), where `set -u` treats
 # "${secrets[@]}" as unbound whenever the array is still empty - a real
 # footgun found by running this script, not a style choice.
 set -eo pipefail
 
-: "${DOCKER_DATA_VOLUME:=agent-docker-data}"
 : "${DOCKER_DATA_SIZE:=20G}"
 
 image="ghcr.io/afrossard/container-base:0.0.3-agent"
@@ -255,6 +269,8 @@ fi
 # why "start a new one" is only offered for a resolved name).
 confirm_replace_if_running "$name" "$offer_new"
 echo "launch-agent-runtime: session name: $name" >&2
+
+: "${DOCKER_DATA_VOLUME:=${name}-docker-data}"
 
 if ! msb volume inspect "$DOCKER_DATA_VOLUME" >/dev/null 2>&1; then
   msb volume create --name "$DOCKER_DATA_VOLUME" --kind disk --size "$DOCKER_DATA_SIZE"
