@@ -59,6 +59,24 @@
 #                        value (msb itself rejects an inline ENV=VALUE form)
 #   --force              skip the confirmation before replacing a sandbox
 #                        that's currently running (see below)
+#   --persist-claude-auth
+#                        mount a persistent volume for Claude Code's own
+#                        credentials at /home/vscode/.claude, plus a
+#                        separate host file for the sibling
+#                        /home/vscode/.claude.json - so a completed OAuth
+#                        login survives --replace instead of repeating
+#                        the browser flow every session. A deliberate
+#                        departure from the disposable-VM default
+#                        (docs/research/0022's addendum): the credential
+#                        ends up as a plain, readable host file for as
+#                        long as the volume exists, a materially
+#                        different exposure than Docker Desktop's own VM
+#                        disk or macOS Keychain. Off by default - the
+#                        headless pattern (--secret) is what ADR-0013
+#                        actually describes and doesn't need this; this
+#                        flag is for a human driving an interactive
+#                        session (the no-command default above) who
+#                        doesn't want to re-login every time.
 #
 # --replace silently SIGTERMs (then SIGKILLs after a grace period) a
 # sandbox that's still running, whether or not you meant to end whatever
@@ -75,6 +93,19 @@
 #   DOCKER_DATA_VOLUME  name of the persistent /var/lib/docker volume
 #                       (default: <session name>-docker-data - see below)
 #   DOCKER_DATA_SIZE    size of that volume (default: 20G)
+#   CLAUDE_AUTH_VOLUME  name of the ~/.claude volume used by
+#                       --persist-claude-auth (default: agent-claude-creds).
+#                       Deliberately not scoped to the session name like
+#                       DOCKER_DATA_VOLUME is: a login is a per-operator
+#                       credential, not a per-session one, and a dir-kind
+#                       volume (unlike disk-kind) can be attached to more
+#                       than one running guest at once - verified
+#                       directly - so sharing it across sessions is safe.
+#   CLAUDE_AUTH_JSON    host path backing ~/.claude.json, the state
+#                       Claude Code keeps outside ~/.claude itself
+#                       (default: ~/.container-base-agent-runtime/claude.json).
+#                       --mount-file needs a real host path, not a named
+#                       volume - msb has no volume kind for a single file.
 #
 # A disk-kind volume can only be attached to one *running* guest at a
 # time - verified directly: a second sandbox trying to attach a volume a
@@ -104,6 +135,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/agent-runtime.sh"
 image="ghcr.io/afrossard/container-base:0.0.3-agent"
 name=""
 force=0
+persist_claude_auth=0
 secrets=()
 
 # "name<TAB>status" lines for every sandbox tagged with this repo's label
@@ -231,6 +263,10 @@ while [ "$#" -gt 0 ]; do
       force=1
       shift
       ;;
+    --persist-claude-auth)
+      persist_claude_auth=1
+      shift
+      ;;
     --)
       shift
       break
@@ -279,7 +315,25 @@ if ! msb volume inspect "$DOCKER_DATA_VOLUME" >/dev/null 2>&1; then
   msb volume create --name "$DOCKER_DATA_VOLUME" --kind disk --size "$DOCKER_DATA_SIZE"
 fi
 
+claude_mounts=()
+if [ "$persist_claude_auth" = "1" ]; then
+  : "${CLAUDE_AUTH_VOLUME:=agent-claude-creds}"
+  : "${CLAUDE_AUTH_JSON:=$HOME/.container-base-agent-runtime/claude.json}"
+
+  if ! msb volume inspect "$CLAUDE_AUTH_VOLUME" >/dev/null 2>&1; then
+    msb volume create --name "$CLAUDE_AUTH_VOLUME" --kind dir
+  fi
+  mkdir -p "$(dirname "$CLAUDE_AUTH_JSON")"
+  [ -e "$CLAUDE_AUTH_JSON" ] || echo '{}' >"$CLAUDE_AUTH_JSON"
+
+  claude_mounts=(
+    --mount-named "${CLAUDE_AUTH_VOLUME}:/home/vscode/.claude"
+    --mount-file "${CLAUDE_AUTH_JSON}:/home/vscode/.claude.json"
+  )
+fi
+
 exec msb run --replace "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
   "${secrets[@]}" \
   --mount-named "${DOCKER_DATA_VOLUME}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
+  "${claude_mounts[@]}" \
   "$image" -- "$@"
