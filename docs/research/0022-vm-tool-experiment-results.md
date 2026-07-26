@@ -204,6 +204,10 @@ Claude Code detected this correctly rather than failing silently - it reported t
 Restoring from that backup and adding a second, explicit `--mount-file` for `~/.claude.json` (backed by a plain file in the same host directory as the volume) made credentials survive a full `--replace` cycle cleanly.
 The general lesson, beyond Claude Code specifically: **never assume a tool's persistent state is a single directory** - check for sibling dotfiles before wiring up a persistence volume for anything.
 
+**A `kind=dir` volume can be attached to more than one running guest at once - unlike `kind=disk` - confirmed directly rather than assumed, in the later session that wired this into `scripts/launch-agent-runtime` as `--persist-claude-auth`.**
+Two sandboxes were launched with the same named `kind=dir` volume mounted while both were still running: one wrote a file, the second read it back and appended its own write, and neither launch errored the way a second `kind=disk` attachment does ("already attached with an incompatible disk mode", `scripts/launch-agent-runtime`'s own `DOCKER_DATA_VOLUME` comment).
+This is what makes sharing one `--persist-claude-auth` credential volume across multiple sessions - even concurrently, not just sequentially - safe: the single-attachment exclusivity that forces `DOCKER_DATA_VOLUME` to be scoped per session is a `disk`-kind property, not a property of msb's named volumes generally.
+
 **Sandboxes stay running until stopped, by this image's own design, not msb's.**
 This experiment's draft image's `ENTRYPOINT` starts `dockerd` and then `exec`s into `"$@"`, falling back to `sleep infinity` when no command is given - a deliberate choice so a sandbox could be launched once (`-d`) and attached to repeatedly (`msb exec`) across a long testing session.
 Two idle guests were left running for some time as a direct result before this was noticed.

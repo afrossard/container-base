@@ -23,3 +23,11 @@ repo_name() {
 usage() {
   sed -n '/^# Usage:/,/^$/p' "$0" | cut -c3-
 }
+
+# Creates a named msb volume if it doesn't already exist. Extra args pass
+# straight through to `msb volume create` (--kind, --size, ...).
+ensure_volume() {
+  local name="$1"
+  shift
+  msb volume inspect "$name" >/dev/null 2>&1 || msb volume create --name "$name" "$@"
+}

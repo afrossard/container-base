@@ -102,13 +102,20 @@
 #                       --persist-claude-auth (default: agent-claude-creds).
 #                       Deliberately not scoped to the session name like
 #                       DOCKER_DATA_VOLUME is: a login is a per-operator
-#                       credential, not a per-session one, and a dir-kind
-#                       volume (unlike disk-kind) can be attached to more
-#                       than one running guest at once - verified
-#                       directly - so sharing it across sessions is safe.
+#                       credential, not a per-session one, and unlike
+#                       disk-kind, a dir-kind volume can be attached to
+#                       more than one running guest at once (confirmed
+#                       directly, not assumed - docs/research/0022's
+#                       addendum), so sharing it across sessions, even
+#                       concurrently, is safe.
 #   CLAUDE_AUTH_JSON    host path backing ~/.claude.json, the state
 #                       Claude Code keeps outside ~/.claude itself
-#                       (default: ~/.container-base-agent-runtime/claude.json).
+#                       (default: ~/.container-base-agent-runtime/claude.json
+#                       - a repo-owned path, not alongside the volume the
+#                       way docs/research/0022's own prototype put it,
+#                       since that path lives under msb's own internal
+#                       ~/.microsandbox/volumes/ layout, undocumented and
+#                       not something to build a permanent dependency on).
 #                       --mount-file needs a real host path, not a named
 #                       volume - msb has no volume kind for a single file.
 #
@@ -325,18 +332,14 @@ echo "launch-agent-runtime: session name: $name" >&2
 
 : "${DOCKER_DATA_VOLUME:=${name}-docker-data}"
 
-if ! msb volume inspect "$DOCKER_DATA_VOLUME" >/dev/null 2>&1; then
-  msb volume create --name "$DOCKER_DATA_VOLUME" --kind disk --size "$DOCKER_DATA_SIZE"
-fi
+ensure_volume "$DOCKER_DATA_VOLUME" --kind disk --size "$DOCKER_DATA_SIZE"
 
 claude_mounts=()
 if [ "$persist_claude_auth" = "1" ]; then
   : "${CLAUDE_AUTH_VOLUME:=agent-claude-creds}"
   : "${CLAUDE_AUTH_JSON:=$HOME/.container-base-agent-runtime/claude.json}"
 
-  if ! msb volume inspect "$CLAUDE_AUTH_VOLUME" >/dev/null 2>&1; then
-    msb volume create --name "$CLAUDE_AUTH_VOLUME" --kind dir
-  fi
+  ensure_volume "$CLAUDE_AUTH_VOLUME" --kind dir
   mkdir -p "$(dirname "$CLAUDE_AUTH_JSON")"
   [ -e "$CLAUDE_AUTH_JSON" ] || echo '{}' >"$CLAUDE_AUTH_JSON"
 
