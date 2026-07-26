@@ -20,13 +20,18 @@
 # later session - provisioning it per launch would pay disk-format cost on
 # every disposable guest for no reason.
 #
-# There is no default command: the guest's lifetime is the task's lifetime
-# (ADR-0013's disposable-VM model), so a missing command is a usage error,
-# not a fallback to a standing process.
+# The image itself has no default command (ADR-0013's disposable-VM model):
+# a missing command run directly against the image is a usage error, not a
+# fallback to a standing process. This launcher, one level up, does supply
+# its own default when a human runs it bare: an interactive shell with a
+# real tty, matching plain `docker run -it`'s convention - the guest still
+# disposes of itself the moment that shell exits, so it stays a one-shot
+# run, not a standing daemon. An explicit COMMAND still runs non-interactive
+# and scripted, exactly as before.
 #
 # Usage:
 #   scripts/launch-agent-runtime [--name SESSION] [--image REF] \
-#     [--secret ENV@HOST]... -- COMMAND...
+#     [--secret ENV@HOST]... [-- COMMAND...]
 #
 #   --name SESSION      sandbox name, forwarded to `msb run --name --replace`.
 #                        Defaults to <repo-name>-<random 4 digits> (the repo
@@ -108,9 +113,17 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+# No command: an interactive shell, with a real tty, is this launcher's own
+# default (not the image's - see the comment block above). zsh, not bash:
+# every zsh invocation sources /etc/zsh/zshenv unconditionally (ADR-0010),
+# which is where the dev image's mise shims and Homebrew shellenv live, so
+# an interactive default shell gets the same PATH a human dev container
+# session would - bash would get none of it. A given command still runs
+# scripted, with no tty, as before.
+tty_flag="--no-tty"
 if [ "$#" -eq 0 ]; then
-  echo "launch-agent-runtime: a command is required after --; the agent runtime has no default command (ADR-0013)" >&2
-  exit 1
+  set -- zsh
+  tty_flag="-t"
 fi
 
 if [ -z "$name" ]; then
@@ -122,7 +135,7 @@ if ! msb volume inspect "$DOCKER_DATA_VOLUME" >/dev/null 2>&1; then
   msb volume create --name "$DOCKER_DATA_VOLUME" --kind disk --size "$DOCKER_DATA_SIZE"
 fi
 
-exec msb run --replace --no-tty --name "$name" \
+exec msb run --replace "$tty_flag" --name "$name" \
   "${secrets[@]}" \
   --mount-named "${DOCKER_DATA_VOLUME}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
   "$image" -- "$@"
