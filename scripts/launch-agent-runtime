@@ -44,7 +44,8 @@
 #
 # Usage:
 #   scripts/launch-agent-runtime [--name SESSION] [--image REF] \
-#     [--clone-url URL] [--secret ENV@HOST]... [-- COMMAND...]
+#     [--clone-url URL] [--secret ENV@HOST]... \
+#     [--memory SIZE] [--cpus N] [--max-memory SIZE] [-- COMMAND...]
 #
 #   --name SESSION      sandbox name, forwarded to `msb run --name --replace`.
 #                        Defaults to the repo name (from `git remote get-url
@@ -86,6 +87,43 @@
 #                        not left implicit, since it decides what happens
 #                        when a scoped credential is sent toward a host it
 #                        was never given to.
+#   --memory SIZE        forwarded verbatim to `msb run --memory`
+#                        (default: 8G). msb's own default with neither flag
+#                        given is 512M/1 vCPU (measured directly, issue
+#                        #51) - not enough to hold dockerd plus however
+#                        many Claude Code sessions and background agents a
+#                        session runs concurrently, and the guest's OOM
+#                        killer firing on that ceiling is silent: no
+#                        host-visible error, and
+#                        anything not on a mounted volume dies with the
+#                        sandbox. 8G was chosen for this host's real
+#                        workload (measured, issue #51's own reproduction:
+#                        two concurrent Claude Code sessions, a background
+#                        agent, and dockerd, all at once) and re-checked
+#                        against a 24G/10-core dev host - substantial
+#                        headroom, not a number carried over from the
+#                        issue that proposed it unverified.
+#   --cpus N             forwarded verbatim to `msb run --cpus`
+#                        (default: 4, for the same reason and against the
+#                        same measurement as --memory above).
+#   --max-memory SIZE    forwarded verbatim to `msb run --max-memory`
+#                        (default: 16G). This is a boot-time ceiling for
+#                        a later online hotplug, not automatic headroom:
+#                        verified directly (issue #51) that a guest given
+#                        --max-memory alone, or --memory below what a
+#                        workload actually needs, is still OOM-killed at
+#                        the --memory floor - the guest kernel never grows
+#                        into the declared ceiling on its own. What does
+#                        work, verified the same way, is an operator
+#                        running `msb modify SESSION --memory SIZE` by
+#                        hand against a running guest, which hotplugs
+#                        memory live up to --max-memory with no restart.
+#                        --memory above must therefore already be sized
+#                        for the real workload, not left low on the
+#                        assumption --max-memory will cover the gap;
+#                        --max-memory only buys a manual escape hatch if
+#                        --memory's own default still turns out to be
+#                        short.
 #   --clone-url URL      overrides the repo cloned into the guest at
 #                        launch (issue #32 / ADR-0015: a full clone made
 #                        inside the guest, never a bind mount or
@@ -192,6 +230,9 @@ persist_claude_auth=""
 clone_url=""
 secrets=()
 violation_flag=()
+memory="8G"
+cpus="4"
+max_memory="16G"
 
 # "name<TAB>status" lines for every sandbox tagged with this repo's label
 # (attached at launch below), not a name-prefix guess - exact rather than
@@ -329,6 +370,18 @@ while [ "$#" -gt 0 ]; do
       violation_flag=(--on-secret-violation "$2")
       shift 2
       ;;
+    --memory)
+      memory="$2"
+      shift 2
+      ;;
+    --cpus)
+      cpus="$2"
+      shift 2
+      ;;
+    --max-memory)
+      max_memory="$2"
+      shift 2
+      ;;
     --clone-url)
       clone_url="$2"
       shift 2
@@ -419,6 +472,7 @@ if [ "$persist_claude_auth" = "1" ]; then
 fi
 
 exec msb run --replace "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
+  --memory "$memory" --cpus "$cpus" --max-memory "$max_memory" \
   "${secrets[@]}" \
   "${violation_flag[@]}" \
   --mount-named "${DOCKER_DATA_VOLUME}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
