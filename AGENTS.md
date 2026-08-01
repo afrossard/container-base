@@ -61,7 +61,9 @@ Issue #32 wires the workspace itself into the launcher: a `workspace-init` scrip
 
 Issue #33 adds `dotfiles-bootstrap` to `workspace-init`, run before the clone on every launch, not just the first (ADR-0016): the operator's global `AGENTS.md` conventions apply from session start, `DOTFILES_REPO` passes through from the host environment the same way `.devcontainer/devcontainer.json` does via `remoteEnv`, and the command is already a no-op with `DOTFILES_REPO` unset so nothing here guards it again. Verified directly against the real, public `dotfiles` repo: `~/.claude/CLAUDE.md` resolves to a real file both cold and after a `--replace`, a planted `.credentials.json` survives a bootstrap run untouched, and an unset `DOTFILES_REPO` still boots cleanly. One finding worth recording: chezmoi's own source directory (`~/.local/share/chezmoi`) is not part of the `--persist-claude-auth` mount, so every `--replace` actually re-runs `chezmoi init` (cold), never `update` (warm) - harmless, since ADR-0009's `--force` already covers drift either way, just not the warm path the naming suggests.
 
-Issues #30 and #35 through #37 carry the remaining implementation.
+Issue #35 commits `.claude/settings.json` (`sandbox.enabled` and `sandbox.autoAllowBashIfSandboxed`, both `true`), renamed from the gitignored `.claude/settings.local.json` a fresh clone inside the agent runtime never had. `.gitignore` still ignores `settings.local.json` itself, so a local override remains possible; the same setting also belongs in the operator's own dotfiles as `~/.claude/settings.json` for every other repo an agent works in (ADR-0016), and project settings taking precedence over user settings makes that redundancy inert here rather than conflicting. This repo is public, so the setting now reaches contributors too - anyone working inside this repo's own dev image is fine, since it ships bubblewrap, but a contributor on a bare Linux host without bubblewrap could see sandboxed bash fail outright rather than degrade quietly.
+
+Issues #30 and #37 carry the remaining implementation.
 
 ## Known consumers pending migration
 
