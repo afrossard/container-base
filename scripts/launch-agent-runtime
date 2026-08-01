@@ -35,6 +35,12 @@
 # via `msb run --script-path` and run as the actual launched command
 # (`workspace-init COMMAND...`), so the clone-then-exec step composes the
 # same way whether COMMAND is the interactive default or an explicit one.
+# workspace-init also runs `dotfiles-bootstrap` first, every launch, not
+# just the first one (issue #33 / ADR-0016), passing DOTFILES_REPO
+# through from this same host environment variable, the way
+# .devcontainer/devcontainer.json passes it via remoteEnv's
+# `${localEnv:DOTFILES_REPO}`. dotfiles-bootstrap is already a no-op with
+# DOTFILES_REPO unset, so nothing here guards it again.
 #
 # Usage:
 #   scripts/launch-agent-runtime [--name SESSION] [--image REF] \
@@ -402,4 +408,5 @@ exec msb run --replace "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
   "${claude_mounts[@]}" \
   --script-path "workspace-init:${script_dir}/workspace-init" \
   --env "WORKSPACE_CLONE_URL=${clone_url}" \
+  --env "DOTFILES_REPO=${DOTFILES_REPO:-}" \
   "$image" -- workspace-init "$@"
