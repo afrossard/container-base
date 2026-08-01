@@ -39,14 +39,16 @@ fi
 /usr/local/share/docker-init.sh true 2>/var/log/docker-init.stderr.log
 grep -v '^echo: write error: Invalid argument$' /var/log/docker-init.stderr.log >&2 || true
 
-# A mounted volume or host-backed file (scripts/launch-agent-runtime's
-# --persist-claude-auth, for one) lands owned by root regardless of what
-# owns it on the host - verified directly, not assumed: a host file this
-# script's own invoking user owned still showed up root:root inside the
-# guest. vscode can't write to either without this, so it's fixed up
-# here, the one place with root access after mounts attach but before
-# privilege drops - a no-op, harmlessly, for any path that isn't mounted.
-chown -R vscode:vscode /home/vscode/.claude /home/vscode/.claude.json 2>/dev/null || true
+# A mounted volume (scripts/launch-agent-runtime's --persist-claude-auth,
+# for one) lands owned by root regardless of what owns it on the host -
+# verified directly, not assumed: a host-backed path this script's own
+# invoking user owned still showed up root:root inside the guest. vscode
+# can't write to it without this, so it's fixed up here, the one place
+# with root access after mounts attach but before privilege drops - a
+# no-op, harmlessly, if nothing is mounted. ~/.claude.json isn't a mount
+# of its own (issue #54: workspace-init symlinks it into ~/.claude, as
+# vscode, after this runs), so it's not listed here.
+chown -R vscode:vscode /home/vscode/.claude 2>/dev/null || true
 
 # dockerd itself runs as root; the given command drops to vscode via
 # runuser, since the feature already put vscode in the docker group at

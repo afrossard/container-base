@@ -15,6 +15,27 @@
 set -eu
 
 : "${WORKSPACE_CLONE_URL:?WORKSPACE_CLONE_URL must be set - scripts/launch-agent-runtime always sets it}"
+: "${PERSIST_CLAUDE_AUTH:=0}"
+
+# Issue #54 (see launch-agent-runtime's own Environment comment for why
+# `--mount-file` was dropped in favor of this): under --persist-claude-auth
+# (PERSIST_CLAUDE_AUTH=1, set by launch-agent-runtime), ~/.claude.json -
+# Claude Code's own state, kept as a sibling of ~/.claude rather than
+# inside it - is symlinked into CLAUDE_AUTH_VOLUME, the same dir-kind
+# mount ~/.claude itself already relies on to survive a relaunch. Every
+# write Claude Code makes to the "file" then lands inside that proven
+# mount, rather than a second, distrusted mechanism. Runs every launch,
+# not just the first, the same way dotfiles-bootstrap does below: a fresh
+# guest's ~/.claude.json starts as whatever the image ships, and must be
+# replaced with the symlink before Claude Code ever reads or writes it.
+# Skipped entirely without --persist-claude-auth - with no volume mounted
+# at ~/.claude, the target directory would just be plain ephemeral guest
+# disk, no different from leaving ~/.claude.json alone.
+if [ "$PERSIST_CLAUDE_AUTH" = "1" ]; then
+  claude_json="$HOME/.claude/claude.json"
+  [ -e "$claude_json" ] || echo '{}' >"$claude_json"
+  ln -sfn "$claude_json" "$HOME/.claude.json"
+fi
 
 # dotfiles-bootstrap runs first (issue #33 / ADR-0016): the operator's
 # global AGENTS.md conventions - no em dashes, never self-attribute as a
