@@ -1,0 +1,24 @@
+#!/bin/sh
+# Registered into the guest as `workspace-init` (msb run --script-path,
+# scripts/launch-agent-runtime), issue #32 / ADR-0015's workspace step: a
+# full clone made inside the guest at launch, composed by the launcher
+# rather than baked into the image. Every launch runs this first, then
+# execs into the given command from inside the clone - the interactive
+# default (`zsh`) and an explicit COMMAND compose identically, with
+# neither side special-cased.
+#
+# No --depth: this repo's own /code-review skill relies on git
+# merge-base, which a shallow clone breaks. No --ref flag: a full clone
+# already carries every pushed ref, and a ref flag useful enough to want
+# would default to the host's current branch and fail at boot whenever
+# that branch is unpushed (ADR-0015).
+set -eu
+
+: "${WORKSPACE_CLONE_URL:?WORKSPACE_CLONE_URL must be set - scripts/launch-agent-runtime always sets it}"
+
+repo_dir="$HOME/$(basename "$WORKSPACE_CLONE_URL" .git)"
+
+git clone "$WORKSPACE_CLONE_URL" "$repo_dir"
+cd "$repo_dir"
+
+exec "$@"
