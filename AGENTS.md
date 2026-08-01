@@ -48,7 +48,16 @@ ADR-0015 settles the workspace question ADR-0013 left provisional - a full clone
 Bind mounts are rejected there with evidence rather than by inheritance: `core.hooksPath` is `.husky/_`, in the working tree, so even a mount excluding `.git` hands over host command execution, and a `git worktree` is worse, since `git rev-parse --git-path hooks` resolves to the main checkout's hooks and the worktree's `.git` holds an absolute host path.
 ADR-0016 records that the runtime runs `dotfiles-bootstrap` every session, trading reproducibility for the conventions the operator's global `AGENTS.md` carries and this repo's does not.
 A ruleset on `main` (issue #31) is applied and verified by demonstration - a direct push with the repo owner's own credential is rejected, which settles the repository-scoped-token case by implication since a token holds strictly less authority.
-Issues #30 and #32 through #37 carry the remaining implementation; #34's experiment, whether `--secret` substitution survives `git push`'s Basic-auth base64 encoding, is the one that could still move the design, since a failure there puts real SSH key material in guest storage.
+#31's own last outstanding criterion (force-push on a feature branch with the repository-scoped PAT) was closed out by #34's live-fire test, below.
+
+Issue #34 settled the transport question by direct experiment rather than assumption: `--secret` substitution survives `git push`'s Basic-auth base64 encoding, because microsandbox does host-scoped TLS interception (the scoped host's certificate is reissued by `CN=microsandbox CA`) rather than a literal byte search-and-replace, so the placeholder is rewritten at the semantic, decoded-credential level regardless of encoding.
+ADR-0015's placeholder model holds; no SSH deploy key departure was needed.
+`scripts/launch-agent-runtime` gained `--on-secret-violation` passthrough (previously only `--secret` forwarded).
+A live-fire test against the real repo with a fine-grained PAT (Contents R/W, Pull requests R/W, Issues R/W, Metadata R) confirmed every acceptance criterion: the guest env holds only the placeholder, the agent can push, force-push, open a PR, comment on an issue, and create an issue, a direct push to `main` is rejected, and the real secret cannot reach an out-of-scope host.
+One rough edge surfaced along the way: commenting on an issue requires GitHub's `issues=write` and `pull_requests=write` together (surfaced via the `x-accepted-github-permissions` diagnostic response header), and a freshly-minted token 403'd on it despite both being individually demonstrated as granted, until the token's permissions were re-saved on GitHub's side - root cause unconfirmed, most likely a stale permission-evaluation cache.
+Issue #40 tracks a separate finding from the same session: this PAT's `Contents:write`, needed to push at all, is also sufficient to merge its own PRs, so nothing at the token or ruleset level stops the agent from merging without human review - accepted behaviorally for now (the agent is only ever instructed to open a PR and stop) rather than closed at the token-scope level.
+
+Issues #30, #32, #33, and #35 through #37 carry the remaining implementation.
 
 ## Known consumers pending migration
 
