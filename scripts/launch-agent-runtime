@@ -140,10 +140,12 @@
 #   --persist-claude-auth / --no-persist-claude-auth
 #                        mount (or don't) a persistent volume for Claude
 #                        Code's own credentials at /home/vscode/.claude,
-#                        plus a separate host file for the sibling
-#                        /home/vscode/.claude.json - so a completed OAuth
-#                        login survives --replace instead of repeating
-#                        the browser flow every session. On by default
+#                        with workspace-init symlinking the sibling
+#                        /home/vscode/.claude.json into that same volume
+#                        (see workspace-init's own comment for why) - so a
+#                        completed OAuth login survives --replace instead
+#                        of repeating the browser flow every session. On
+#                        by default
 #                        exactly when no COMMAND is given (an interactive
 #                        session, the human-driven use this exists for);
 #                        off by default whenever a COMMAND is given,
@@ -186,16 +188,26 @@
 #                       directly, not assumed - docs/research/0022's
 #                       addendum), so sharing it across sessions, even
 #                       concurrently, is safe.
-#   CLAUDE_AUTH_JSON    host path backing ~/.claude.json, the state
-#                       Claude Code keeps outside ~/.claude itself
-#                       (default: ~/.container-base-agent-runtime/claude.json
-#                       - a repo-owned path, not alongside the volume the
-#                       way docs/research/0022's own prototype put it,
-#                       since that path lives under msb's own internal
-#                       ~/.microsandbox/volumes/ layout, undocumented and
-#                       not something to build a permanent dependency on).
-#                       --mount-file needs a real host path, not a named
-#                       volume - msb has no volume kind for a single file.
+#
+# ~/.claude.json (a state file Claude Code keeps as a sibling of ~/.claude
+# itself, not inside it - docs/research/0022's addendum) used to get its
+# own separate mount, `--mount-file CLAUDE_AUTH_JSON:/home/vscode/.claude.json`
+# backed by a plain host file. Issue #54 found that mount does not actually
+# persist writes on this host's msb (confirmed at v0.6.8, `msb doctor`):
+# content written inside the guest is silently discarded on exit even
+# though `msb inspect` reports the mount `(rw)`, reproduced three times
+# including with an explicit `sync` and a delay before a clean guest exit.
+# The credential file itself (~/.claude/.credentials.json, inside
+# CLAUDE_AUTH_VOLUME) survives regardless - only the sibling file's own
+# `--mount-file` write-back is broken - but that's enough state loss to
+# make Claude Code stop considering itself logged in after a relaunch.
+# `--mount-file` needing a real host path rather than a named volume (msb
+# has no volume kind for a single file) is exactly why it was reached for
+# in the first place; since it doesn't actually persist here, workspace-init
+# now symlinks ~/.claude.json into CLAUDE_AUTH_VOLUME instead (its own
+# dir-kind mount, already confirmed working), so writes land in the one
+# mechanism that's actually proven to survive - see workspace-init's own
+# comment for the symlink itself.
 #
 # A disk-kind volume can only be attached to one *running* guest at a
 # time - verified directly: a second sandbox trying to attach a volume a
@@ -459,15 +471,11 @@ ensure_volume "$DOCKER_DATA_VOLUME" --kind disk --size "$DOCKER_DATA_SIZE"
 claude_mounts=()
 if [ "$persist_claude_auth" = "1" ]; then
   : "${CLAUDE_AUTH_VOLUME:=agent-claude-creds}"
-  : "${CLAUDE_AUTH_JSON:=$HOME/.container-base-agent-runtime/claude.json}"
 
   ensure_volume "$CLAUDE_AUTH_VOLUME" --kind dir
-  mkdir -p "$(dirname "$CLAUDE_AUTH_JSON")"
-  [ -e "$CLAUDE_AUTH_JSON" ] || echo '{}' >"$CLAUDE_AUTH_JSON"
 
   claude_mounts=(
     --mount-named "${CLAUDE_AUTH_VOLUME}:/home/vscode/.claude"
-    --mount-file "${CLAUDE_AUTH_JSON}:/home/vscode/.claude.json"
   )
 fi
 
@@ -480,4 +488,5 @@ exec msb run --replace "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
   --script-path "workspace-init:${script_dir}/workspace-init" \
   --env "WORKSPACE_CLONE_URL=${clone_url}" \
   --env "DOTFILES_REPO=${DOTFILES_REPO:-}" \
+  --env "PERSIST_CLAUDE_AUTH=${persist_claude_auth}" \
   "$image" -- workspace-init "$@"
