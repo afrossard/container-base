@@ -16,6 +16,20 @@ set -eu
 
 : "${WORKSPACE_CLONE_URL:?WORKSPACE_CLONE_URL must be set - scripts/launch-agent-runtime always sets it}"
 
+# dotfiles-bootstrap runs first (issue #33 / ADR-0016): the operator's
+# global AGENTS.md conventions - no em dashes, never self-attribute as a
+# commit co-author, one sentence per line in Markdown, and the rest -
+# apply from session start, not just to whatever this repo's own
+# AGENTS.md happens to restate. It is already idempotent (ADR-0009's
+# cold-init versus warm-update split) and already a no-op with
+# DOTFILES_REPO unset, so it runs unconditionally here rather than being
+# guarded again. Running it every launch, not just the first one, is the
+# point: under --persist-claude-auth, ~/.claude/CLAUDE.md (a symlink to
+# ../AGENTS.md) lands in the persistent volume while its target lands on
+# the guest's ephemeral disk, so a launch that skipped this would find a
+# symlink to a file that no longer exists.
+dotfiles-bootstrap
+
 repo_dir="$HOME/$(basename "$WORKSPACE_CLONE_URL" .git)"
 
 git clone "$WORKSPACE_CLONE_URL" "$repo_dir"
