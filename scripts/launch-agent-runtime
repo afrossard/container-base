@@ -29,9 +29,16 @@
 # run, not a standing daemon. An explicit COMMAND still runs non-interactive
 # and scripted, exactly as before.
 #
+# Every launch clones this repo into the guest first (issue #32 /
+# ADR-0015): a full clone made inside the guest, not a bind mount and not
+# a --copy-dir of the host tree - see scripts/workspace-init, registered
+# via `msb run --script-path` and run as the actual launched command
+# (`workspace-init COMMAND...`), so the clone-then-exec step composes the
+# same way whether COMMAND is the interactive default or an explicit one.
+#
 # Usage:
 #   scripts/launch-agent-runtime [--name SESSION] [--image REF] \
-#     [--secret ENV@HOST]... [-- COMMAND...]
+#     [--clone-url URL] [--secret ENV@HOST]... [-- COMMAND...]
 #
 #   --name SESSION      sandbox name, forwarded to `msb run --name --replace`.
 #                        Defaults to the repo name (from `git remote get-url
@@ -67,6 +74,17 @@
 #                        not left implicit, since it decides what happens
 #                        when a scoped credential is sent toward a host it
 #                        was never given to.
+#   --clone-url URL      overrides the repo cloned into the guest at
+#                        launch (issue #32 / ADR-0015: a full clone made
+#                        inside the guest, never a bind mount or
+#                        --copy-dir of the host tree). Defaults to this
+#                        repo's own `git remote get-url origin`. Every
+#                        launch clones, whether the command is the
+#                        interactive default or an explicit COMMAND - a
+#                        `workspace-init` script (`msb run
+#                        --script-path`) clones, cds in, and execs the
+#                        given command, so neither path is special-cased
+#                        and both land inside the same working clone.
 #   --force              skip the confirmation before replacing a sandbox
 #                        that's currently running (see below)
 #   --persist-claude-auth / --no-persist-claude-auth
@@ -149,8 +167,9 @@
 # footgun found by running this script, not a style choice.
 set -eo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/agent-runtime.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/agent-runtime.sh"
+source "$script_dir/lib/agent-runtime.sh"
 
 : "${DOCKER_DATA_SIZE:=20G}"
 
@@ -158,6 +177,7 @@ image="ghcr.io/afrossard/container-base:0.0.5-agent"
 name=""
 force=0
 persist_claude_auth=""
+clone_url=""
 secrets=()
 violation_flag=()
 
@@ -286,6 +306,10 @@ while [ "$#" -gt 0 ]; do
       violation_flag=(--on-secret-violation "$2")
       shift 2
       ;;
+    --clone-url)
+      clone_url="$2"
+      shift 2
+      ;;
     --force)
       force=1
       shift
@@ -313,6 +337,13 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+if [ -z "$clone_url" ]; then
+  if ! clone_url=$(repo_url); then
+    echo "launch-agent-runtime: no 'origin' remote to clone from; pass --clone-url explicitly" >&2
+    exit 1
+  fi
+fi
 
 # No command: an interactive shell, with a real tty, is this launcher's own
 # default (not the image's - see the comment block above). zsh, not bash:
@@ -369,4 +400,6 @@ exec msb run --replace "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
   "${violation_flag[@]}" \
   --mount-named "${DOCKER_DATA_VOLUME}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
   "${claude_mounts[@]}" \
-  "$image" -- "$@"
+  --script-path "workspace-init:${script_dir}/workspace-init" \
+  --env "WORKSPACE_CLONE_URL=${clone_url}" \
+  "$image" -- workspace-init "$@"

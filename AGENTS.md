@@ -57,7 +57,9 @@ A live-fire test against the real repo with a fine-grained PAT (Contents R/W, Pu
 One rough edge surfaced along the way: commenting on an issue requires GitHub's `issues=write` and `pull_requests=write` together (surfaced via the `x-accepted-github-permissions` diagnostic response header), and a freshly-minted token 403'd on it despite both being individually demonstrated as granted, until the token's permissions were re-saved on GitHub's side - root cause unconfirmed, most likely a stale permission-evaluation cache.
 Issue #40 tracks a separate finding from the same session: this PAT's `Contents:write`, needed to push at all, is also sufficient to merge its own PRs, so nothing at the token or ruleset level stops the agent from merging without human review - accepted behaviorally for now (the agent is only ever instructed to open a PR and stop) rather than closed at the token-scope level.
 
-Issues #30, #32, #33, and #35 through #37 carry the remaining implementation.
+Issue #32 wires the workspace itself into the launcher: a `workspace-init` script, registered into the guest with `msb run --script-path` and run as the actual launched command (`workspace-init COMMAND...`), clones the repo (a full clone, no `--depth`, no `--ref`, never a bind mount or `--copy-dir` of the host tree - ADR-0015), `cd`s into it, and `exec`s the given command - so the interactive default and an explicit `COMMAND` compose identically, with neither special-cased. Two risks flagged as unverified going in turned out not to bite, checked directly rather than assumed: `/.msb/scripts` is on `PATH` even under the `runuser`-dropped, non-login `vscode` environment `images/agent/entrypoint` hands off to, and the guest's network is already up by the time the clone runs. The default clone URL comes from `git remote get-url origin` (`repo_url()`, alongside the existing `repo_name()`), overridable with `--clone-url`.
+
+Issues #30, #33, and #35 through #37 carry the remaining implementation.
 
 ## Known consumers pending migration
 

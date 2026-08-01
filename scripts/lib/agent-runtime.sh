@@ -18,6 +18,13 @@ repo_name() {
   printf '%s' "$repo"
 }
 
+# The URL workspace-init clones from by default: git remote get-url
+# origin, verbatim. Unlike repo_name() this has no fallback - a clone
+# needs a real URL, and there is no sane default once origin is absent.
+repo_url() {
+  git remote get-url origin
+}
+
 # Extracts the "# Usage:" comment block from whichever script sources this
 # file - $0 is the top-level script actually being run, not this file.
 usage() {
