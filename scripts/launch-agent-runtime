@@ -50,7 +50,13 @@
 #                        Defaults to the repo name (from `git remote get-url
 #                        origin`, falling back to the toplevel directory
 #                        name, falling back to the current directory name
-#                        outside any git repo). Every sandbox this launcher
+#                        outside any git repo) with a `-sandbox` marker
+#                        appended - `container-base-sandbox`, not
+#                        `container-base` - since msb derives the guest's
+#                        hostname from this name absent an explicit
+#                        --hostname, and a bare repo name in the prompt
+#                        does not read as "this is not the repo directory
+#                        on your host." Every sandbox this launcher
 #                        creates carries a `repo=<repo-name>` label
 #                        (`msb run --label`), and that label - not a
 #                        name-prefix guess - is what "existing sandbox for
@@ -236,7 +242,7 @@ confirm_replace_if_running() {
     read -r -p "Replace it, start a new one instead, or abort? [r/n/A] " choice
     case "$choice" in
       r | R) ;;
-      n | N) name=$(printf '%s-%04d' "$(repo_name)" "$((RANDOM % 10000))") ;;
+      n | N) name=$(printf '%s-sandbox-%04d' "$(repo_name)" "$((RANDOM % 10000))") ;;
       *)
         echo "launch-agent-runtime: aborted" >&2
         exit 1
@@ -259,13 +265,24 @@ confirm_replace_if_running() {
 # exactly one (so --replace does its job across repeated invocations,
 # instead of a random suffix defeating it every time); ask which one if
 # there's more than one; only mint a fresh name when there's none yet.
+#
+# A freshly minted name always carries a `-sandbox` marker
+# (`<repo>-sandbox`, or `<repo>-sandbox-NNNN` once a collision forces the
+# random suffix): hostname==name (msb's own default, unset --hostname),
+# so this is what actually distinguishes the guest's prompt from the
+# host's - `container-base-sandbox` reads unambiguously as "not the
+# repo directory," where the bare repo name would not have. repo_name()
+# itself is untouched - it still means the repo's real identity, and
+# stays what the `repo=<repo_name>` label and matching_sandboxes() key
+# on, so an already-running sandbox is still found and reused by label
+# regardless of what its own display name happens to be.
 resolve_name() {
   local base matches count target choice
   base=$(repo_name)
   matches=$(matching_sandboxes "$base")
 
   if [ -z "$matches" ]; then
-    printf '%s' "$base"
+    printf '%s-sandbox' "$base"
     return
   fi
 
@@ -285,7 +302,7 @@ resolve_name() {
     read -r -p "Which one? " choice
 
     if [ "$choice" = "n" ] || [ "$choice" = "N" ]; then
-      printf '%s-%04d' "$base" "$((RANDOM % 10000))"
+      printf '%s-sandbox-%04d' "$base" "$((RANDOM % 10000))"
       return
     fi
     target=$(printf '%s\n' "$matches" | sed -n "${choice}p" | cut -f1)
