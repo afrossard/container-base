@@ -57,6 +57,16 @@
 #   --secret ENV@HOST    forwarded verbatim to `msb run --secret` (repeatable);
 #                        ENV is a host environment variable, never a literal
 #                        value (msb itself rejects an inline ENV=VALUE form)
+#   --on-secret-violation ACTION
+#                        forwarded verbatim to `msb run --on-secret-violation`
+#                        (block, block-and-log, block-and-terminate,
+#                        passthrough). Only meaningful alongside --secret;
+#                        omit to take msb's own default. `block-and-log` is
+#                        this repo's recommendation whenever --secret is in
+#                        play (issue #34): it should be set deliberately,
+#                        not left implicit, since it decides what happens
+#                        when a scoped credential is sent toward a host it
+#                        was never given to.
 #   --force              skip the confirmation before replacing a sandbox
 #                        that's currently running (see below)
 #   --persist-claude-auth / --no-persist-claude-auth
@@ -149,6 +159,7 @@ name=""
 force=0
 persist_claude_auth=""
 secrets=()
+violation_flag=()
 
 # "name<TAB>status" lines for every sandbox tagged with this repo's label
 # (attached at launch below), not a name-prefix guess - exact rather than
@@ -271,6 +282,10 @@ while [ "$#" -gt 0 ]; do
       secrets+=(--secret "$2")
       shift 2
       ;;
+    --on-secret-violation)
+      violation_flag=(--on-secret-violation "$2")
+      shift 2
+      ;;
     --force)
       force=1
       shift
@@ -351,6 +366,7 @@ fi
 
 exec msb run --replace "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
   "${secrets[@]}" \
+  "${violation_flag[@]}" \
   --mount-named "${DOCKER_DATA_VOLUME}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
   "${claude_mounts[@]}" \
   "$image" -- "$@"
