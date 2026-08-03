@@ -2,10 +2,16 @@ name: agent image
 
 on:
   pull_request:
+    paths:
+      - images/agent/**
+      - test/agent/**
+      - package.json
+      - package-lock.json
+      - .github/workflows/agent-image.yml
   workflow_dispatch:
 
 jobs:
-  build-and-test:
+  agent-image:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
