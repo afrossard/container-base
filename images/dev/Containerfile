@@ -124,3 +124,5 @@ RUN install -d -m 0755 /etc/apt/keyrings \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends claude-code \
     && rm -rf /var/lib/apt/lists/* /root/.gnupg
+
+# test marker: path-filter verification for #37, this branch is throwaway
