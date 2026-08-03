@@ -2,10 +2,16 @@ name: dev image
 
 on:
   pull_request:
+    paths:
+      - images/dev/**
+      - test/dev/**
+      - package.json
+      - package-lock.json
+      - .github/workflows/dev-image.yml
   workflow_dispatch:
 
 jobs:
-  build-and-test:
+  dev-image:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
