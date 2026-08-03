@@ -20,3 +20,5 @@ RUN chmod 0755 /usr/local/bin/agent-entrypoint
 # command to a non-root user (docs/research/0022's "drop the sleep infinity
 # fallback" still applies - no default command).
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint"]
+
+# test marker: path-filter verification for #37, this branch is throwaway
