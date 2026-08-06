@@ -94,29 +94,13 @@
 #                        many Claude Code sessions and background agents a
 #                        session runs concurrently, and the guest's OOM
 #                        killer firing on that ceiling is silent: no
-#                        host-visible error, and
-#                        anything not on a mounted volume dies with the
-#                        sandbox. 8G was issue #51's original number,
-#                        chosen against a 24G/10-core Mac alone and
-#                        unverified anywhere else. Issue #52 measured the
-#                        same repro (two concurrent Claude Code sessions, a
-#                        background agent, and dockerd, all at once) by
-#                        hand on an 8GB Chromebook and an 8GB Linux box, and
-#                        found real peak guest usage of ~1.3-1.8G on both -
-#                        while 8G itself exceeds either host's actual total
-#                        RAM, so it "worked" there only because the
-#                        measured workload never grew large enough to
-#                        exercise that ceiling; a workload that did would
-#                        threaten the host, not the guest, which is the
-#                        specific failure #51 already fixed at the guest
-#                        level. Of #52's three options (fixed default,
-#                        host-aware formula, per-host override), 4G is a
-#                        deliberately fixed number, not a formula re-
-#                        derived per host: comfortable headroom above every
-#                        real peak measured so far (roughly double the
-#                        worst case seen), while still fitting safely
-#                        inside total RAM on the smallest hosts tested,
-#                        unlike 8G. Bump with an explicit --memory if a
+#                        host-visible error, and anything not on a mounted
+#                        volume dies with the sandbox. 4G is a fixed
+#                        default, not a per-host formula: comfortable
+#                        headroom above measured real-world peak usage
+#                        (well under 4G on an 8GB host, issue #52) while
+#                        still fitting total RAM on the smallest hosts
+#                        tested. Bump with an explicit --memory if a
 #                        heavier workload's own measurement needs it.
 #   --cpus N             forwarded verbatim to `msb run --cpus`
 #                        (default: 4, for the same reason and against the
