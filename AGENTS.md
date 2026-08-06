@@ -81,7 +81,12 @@ The unmodified 8G default itself exceeds that host's actual total RAM, so it onl
 The default dropped to a fixed 4G rather than a host-aware formula or a per-host override (the other two options raised): comfortable headroom above every peak measured so far, while still fitting safely inside total RAM on the smallest hosts tested.
 The Linux box's own numbers were never posted back to the issue, and the shipped 4G value itself was not independently re-run through the repro before it landed - both still open.
 
-Issue #30 carries the remaining implementation.
+Issue #30 pins the agent runtime's network policy explicitly.
+`scripts/launch-agent-runtime` passed no network flags at all, relying on msb's implicit default-egress policy: deny, with an implicit `allow@public` rule "when no other rules are present" per `msb run --help`.
+Microsandbox's own hosted docs (`docs/networking/overview.mdx`) confirm that default already matches the policy this issue wants - public internet reachable, private networks, loopback, link-local, and cloud metadata endpoints denied - but the implicit form is fragile: the first `--net-rule` added later for any unrelated reason silently drops the `allow@public` rule and leaves the guest with no egress at all, a failure that would surface as an unexplained mid-session hang rather than an error.
+The fix passes `--net public`, msb's documented high-level profile, which states the identical policy as real generated rules rather than a default, and was confirmed by experiment to survive an unrelated `--net-rule` added alongside it.
+Verified against a live guest on this repo's own dev host: a public host returns 200, the dev host's own LAN IP and addresses in 10.0.0.0/8, 172.16.0.0/12, and 192.168.0.0/16 all fail to connect, and `docker build` of `images/dev/Containerfile` still completes inside a guest launched with the real `-agent` image.
+One upstream finding recorded rather than chased further: the `dns` semantic network target documented in both `msb run --help` and microsandbox's own CLI reference rejects every syntax tried, including the exact example from its own docs, on the installed CLI (msb 0.6.8) - the same mismatch issue #22's research flagged and still unfixed upstream; not load-bearing here, since `--net public`'s profile enables gateway DNS automatically without it.
 
 ## Known consumers pending migration
 
