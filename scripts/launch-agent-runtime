@@ -1,226 +1,44 @@
 #!/usr/bin/env bash
-# Launches the published -agent image (ADR-0014) as a disposable
-# microsandbox guest (ADR-0013), the recommendation of
-# docs/research/0022-vm-tool-experiment-results.md.
-#
-# This is host-side tooling, not a container image, and is a narrow,
-# deliberate exception to ADR-0001's "this repo publishes shared container
-# images only" scope - recorded as such in ADR-0014.
-#
-# --secret injects a credential without ever placing its real value in the
-# guest's own environment: the guest sees only a placeholder string, and the
-# real value is substituted in-flight, only for traffic to the host it is
-# scoped to (docs/research/0022's addendum, directly verified against the
-# live Anthropic API).
-#
-# The disk-backed --mount-named volume gives /var/lib/docker its own
-# filesystem instead of msb's default, which nests overlayfs on overlayfs
-# and fails any real multi-layer build (docs/research/0022's header
-# finding). The volume is created once, on first use, and reused by every
-# later session - provisioning it per launch would pay disk-format cost on
-# every disposable guest for no reason.
-#
-# The image itself has no default command (ADR-0013's disposable-VM model):
-# a missing command run directly against the image is a usage error, not a
-# fallback to a standing process. This launcher, one level up, does supply
-# its own default when a human runs it bare: an interactive shell with a
-# real tty, matching plain `docker run -it`'s convention - the guest still
-# disposes of itself the moment that shell exits, so it stays a one-shot
-# run, not a standing daemon. An explicit COMMAND still runs non-interactive
-# and scripted, exactly as before.
-#
-# Every launch clones this repo into the guest first (issue #32 /
-# ADR-0015): a full clone made inside the guest, not a bind mount and not
-# a --copy-dir of the host tree - see scripts/workspace-init, registered
-# via `msb run --script-path` and run as the actual launched command
-# (`workspace-init COMMAND...`), so the clone-then-exec step composes the
-# same way whether COMMAND is the interactive default or an explicit one.
-# workspace-init also runs `dotfiles-bootstrap` first, every launch, not
-# just the first one (issue #33 / ADR-0016), passing DOTFILES_REPO
-# through from this same host environment variable, the way
-# .devcontainer/devcontainer.json passes it via remoteEnv's
-# `${localEnv:DOTFILES_REPO}`. dotfiles-bootstrap is already a no-op with
-# DOTFILES_REPO unset, so nothing here guards it again.
+# Launches the published -agent image as a disposable microsandbox guest
+# (ADR-0013, ADR-0014; the ADR-0001 exception for host-side tooling).
 #
 # Usage:
 #   scripts/launch-agent-runtime [--name SESSION] [--image REF] \
 #     [--clone-url URL] [--secret ENV@HOST]... \
 #     [--memory SIZE] [--cpus N] [--max-memory SIZE] [-- COMMAND...]
 #
-#   --name SESSION      sandbox name, forwarded to `msb run --name --replace`.
-#                        Defaults to the repo name (from `git remote get-url
-#                        origin`, falling back to the toplevel directory
-#                        name, falling back to the current directory name
-#                        outside any git repo) with a `-sandbox` marker
-#                        appended - `container-base-sandbox`, not
-#                        `container-base` - since msb derives the guest's
-#                        hostname from this name absent an explicit
-#                        --hostname, and a bare repo name in the prompt
-#                        does not read as "this is not the repo directory
-#                        on your host." Every sandbox this launcher
-#                        creates carries a `repo=<repo-name>` label
-#                        (`msb run --label`), and that label - not a
-#                        name-prefix guess - is what "existing sandbox for
-#                        this repo" means below and in
-#                        scripts/cleanup-agent-sessions. If exactly one
-#                        existing sandbox carries this repo's label, it's
-#                        reused (replaced) rather than creating a new one -
-#                        the point of --replace, not defeated by a random
-#                        suffix. If more than one matches, you're asked
-#                        which one, interactively; --name skips all of
-#                        this and is used exactly as given (but the label
-#                        is still attached, so cleanup can still find it).
-#                        The resolved name is printed before launch and
-#                        always visible via `msb list` after.
-#   --image REF         agent image to launch
+#   --name SESSION       sandbox name (default: <repo>-sandbox). Reuses a
+#                        matching sandbox by its `repo=<repo>` label;
+#                        prompts if more than one matches.
+#   --image REF          agent image to launch
 #                        (default: ghcr.io/afrossard/container-base:0.0.5-agent)
-#   --secret ENV@HOST    forwarded verbatim to `msb run --secret` (repeatable);
-#                        ENV is a host environment variable, never a literal
-#                        value (msb itself rejects an inline ENV=VALUE form)
+#   --secret ENV@HOST    forwarded to `msb run --secret` (repeatable); ENV
+#                        is a host env var name, not a literal value
 #   --on-secret-violation ACTION
-#                        forwarded verbatim to `msb run --on-secret-violation`
+#                        forwarded to `msb run --on-secret-violation`
 #                        (block, block-and-log, block-and-terminate,
-#                        passthrough). Only meaningful alongside --secret;
-#                        omit to take msb's own default. `block-and-log` is
-#                        this repo's recommendation whenever --secret is in
-#                        play (issue #34): it should be set deliberately,
-#                        not left implicit, since it decides what happens
-#                        when a scoped credential is sent toward a host it
-#                        was never given to.
-#   --memory SIZE        forwarded verbatim to `msb run --memory`
-#                        (default: 4G). msb's own default with neither flag
-#                        given is 512M/1 vCPU (measured directly, issue
-#                        #51) - not enough to hold dockerd plus however
-#                        many Claude Code sessions and background agents a
-#                        session runs concurrently, and the guest's OOM
-#                        killer firing on that ceiling is silent: no
-#                        host-visible error, and anything not on a mounted
-#                        volume dies with the sandbox. 4G is a fixed
-#                        default, not a per-host formula: comfortable
-#                        headroom above measured real-world peak usage,
-#                        while still fitting total RAM on the smallest
-#                        hosts tested. Bump with an explicit --memory if
-#                        a heavier workload's own measurement needs it.
-#   --cpus N             forwarded verbatim to `msb run --cpus`
-#                        (default: 4, for the same reason and against the
-#                        same measurement as --memory above).
-#   --max-memory SIZE    forwarded verbatim to `msb run --max-memory`
-#                        (default: 16G). This is a boot-time ceiling for
-#                        a later online hotplug, not automatic headroom:
-#                        verified directly (issue #51) that a guest given
-#                        --max-memory alone, or --memory below what a
-#                        workload actually needs, is still OOM-killed at
-#                        the --memory floor - the guest kernel never grows
-#                        into the declared ceiling on its own. What does
-#                        work, verified the same way, is an operator
-#                        running `msb modify SESSION --memory SIZE` by
-#                        hand against a running guest, which hotplugs
-#                        memory live up to --max-memory with no restart.
-#                        --memory above must therefore already be sized
-#                        for the real workload, not left low on the
-#                        assumption --max-memory will cover the gap;
-#                        --max-memory only buys a manual escape hatch if
-#                        --memory's own default still turns out to be
-#                        short.
-#   --clone-url URL      overrides the repo cloned into the guest at
-#                        launch (issue #32 / ADR-0015: a full clone made
-#                        inside the guest, never a bind mount or
-#                        --copy-dir of the host tree). Defaults to this
-#                        repo's own `git remote get-url origin`. Every
-#                        launch clones, whether the command is the
-#                        interactive default or an explicit COMMAND - a
-#                        `workspace-init` script (`msb run
-#                        --script-path`) clones, cds in, and execs the
-#                        given command, so neither path is special-cased
-#                        and both land inside the same working clone.
-#   --force              skip the confirmation before replacing a sandbox
-#                        that's currently running (see below)
+#                        passthrough; recommended: block-and-log whenever
+#                        --secret is used)
+#   --memory SIZE        forwarded to `msb run --memory` (default: 4G)
+#   --cpus N             forwarded to `msb run --cpus` (default: 4)
+#   --max-memory SIZE    forwarded to `msb run --max-memory` (default: 16G)
+#   --clone-url URL      repo to clone into the guest
+#                        (default: `git remote get-url origin`)
+#   --force              skip the confirmation before replacing a running
+#                        sandbox
 #   --persist-claude-auth / --no-persist-claude-auth
-#                        mount (or don't) a persistent volume for Claude
-#                        Code's own credentials at /home/vscode/.claude,
-#                        with workspace-init symlinking the sibling
-#                        /home/vscode/.claude.json into that same volume
-#                        (see workspace-init's own comment for why) - so a
-#                        completed OAuth login survives --replace instead
-#                        of repeating the browser flow every session. On
-#                        by default
-#                        exactly when no COMMAND is given (an interactive
-#                        session, the human-driven use this exists for);
-#                        off by default whenever a COMMAND is given,
-#                        since that's ADR-0013's actual disposable-VM
-#                        model - the headless pattern (--secret) doesn't
-#                        need this at all. Either default can be
-#                        overridden explicitly in either direction: force
-#                        it on for a scripted command, or off for an
-#                        interactive session you want to stay truly
-#                        ephemeral. A deliberate departure from the
-#                        disposable-VM default when it's on
-#                        (docs/research/0022's addendum): the credential
-#                        ends up as a plain, readable host file for as
-#                        long as the volume exists, a materially
-#                        different exposure than Docker Desktop's own VM
-#                        disk or macOS Keychain.
+#                        persist Claude Code's login across sessions
+#                        (default: on with no COMMAND, off otherwise)
 #
-# --replace silently SIGTERMs (then SIGKILLs after a grace period) a
-# sandbox that's still running, whether or not you meant to end whatever
-# it was doing - verified directly, not assumed: a live `sleep 300` died
-# in well under a second. Reusing a stopped sandbox is free and safe, so
-# only a currently-running match asks for confirmation (or --force) before
-# it's replaced; a stopped one is reused exactly as before. For a resolved
-# (not explicit --name) match, the prompt also offers a fresh, separate
-# sandbox instead of replacing or aborting - an explicit --name skips
-# straight to replace-or-abort, since a different name is just a
-# different --name away.
+# With no COMMAND, opens an interactive shell; with one, runs it
+# non-interactively.
 #
 # Environment:
-#   DOCKER_DATA_VOLUME  name of the persistent /var/lib/docker volume
-#                       (default: <session name>-docker-data - see below)
-#   DOCKER_DATA_SIZE    size of that volume (default: 20G)
-#   CLAUDE_AUTH_VOLUME  name of the ~/.claude volume used by
-#                       --persist-claude-auth (default: agent-claude-creds).
-#                       Deliberately not scoped to the session name like
-#                       DOCKER_DATA_VOLUME is: a login is a per-operator
-#                       credential, not a per-session one, and unlike
-#                       disk-kind, a dir-kind volume can be attached to
-#                       more than one running guest at once (confirmed
-#                       directly, not assumed - docs/research/0022's
-#                       addendum), so sharing it across sessions, even
-#                       concurrently, is safe.
-#
-# ~/.claude.json (a state file Claude Code keeps as a sibling of ~/.claude
-# itself, not inside it - docs/research/0022's addendum) used to get its
-# own separate mount, `--mount-file CLAUDE_AUTH_JSON:/home/vscode/.claude.json`
-# backed by a plain host file. Issue #54 found that mount does not actually
-# persist writes on this host's msb (confirmed at v0.6.8, `msb doctor`):
-# content written inside the guest is silently discarded on exit even
-# though `msb inspect` reports the mount `(rw)`, reproduced three times
-# including with an explicit `sync` and a delay before a clean guest exit.
-# The credential file itself (~/.claude/.credentials.json, inside
-# CLAUDE_AUTH_VOLUME) survives regardless - only the sibling file's own
-# `--mount-file` write-back is broken - but that's enough state loss to
-# make Claude Code stop considering itself logged in after a relaunch.
-# `--mount-file` needing a real host path rather than a named volume (msb
-# has no volume kind for a single file) is exactly why it was reached for
-# in the first place; since it doesn't actually persist here, workspace-init
-# now symlinks ~/.claude.json into CLAUDE_AUTH_VOLUME instead (its own
-# dir-kind mount, already confirmed working), so writes land in the one
-# mechanism that's actually proven to survive - see workspace-init's own
-# comment for the symlink itself.
-#
-# A disk-kind volume can only be attached to one *running* guest at a
-# time - verified directly: a second sandbox trying to attach a volume a
-# running one already holds fails with "already attached with an
-# incompatible disk mode", even though nothing else was touching it. A
-# single global default volume name would make that failure the norm,
-# not the exception, the moment two sessions run at once - not just two
-# sessions of the same repo, but any two sessions on the host, since
-# nothing before scoped it per repo either. Defaulting the volume name to
-# the session's own name keeps replacing a session reusing its own
-# volume (cache preserved across replace cycles) while any genuinely
-# different session - "start a new one", a different repo, a different
-# --name - gets a genuinely separate disk. Still overridable via the
-# environment for deliberate sharing between sessions that will never
-# run concurrently.
+#   DOCKER_DATA_VOLUME   /var/lib/docker volume name
+#                        (default: <session name>-docker-data)
+#   DOCKER_DATA_SIZE     size of that volume (default: 20G)
+#   CLAUDE_AUTH_VOLUME   ~/.claude volume used by --persist-claude-auth
+#                        (default: agent-claude-creds)
 
 # Not -u: macOS ships bash 3.2 (GPLv3 avoidance), where `set -u` treats
 # "${secrets[@]}" as unbound whenever the array is still empty - a real
@@ -244,16 +62,8 @@ memory="4G"
 cpus="4"
 max_memory="16G"
 
-# "name<TAB>status" lines for every sandbox tagged with this repo's label
-# (attached at launch below), not a name-prefix guess - exact rather than
-# "close enough", and what scripts/cleanup-agent-sessions also matches on.
-# Also always checks the bare repo name by exact name, label or not: a
-# sandbox created before this launcher attached labels at all (every
-# sandbox that existed before that commit) is otherwise invisible to the
-# label query, so it silently drops out of the count - found the hard way
-# when it caused resolve_name to treat two existing sandboxes as one,
-# leading "start a new one" to mint a third rather than actually choosing
-# between the two that already existed.
+# "name<TAB>status" lines for sandboxes matching this repo's label, plus
+# any exact-name match (covers sandboxes created before labels existed).
 matching_sandboxes() {
   {
     msb list --label "repo=$1" --format json 2>/dev/null | jq -r '.[] | "\(.name)\t\(.status)"'
@@ -267,16 +77,9 @@ sandbox_status() {
   msb list --format json 2>/dev/null | jq -r --arg name "$1" '.[] | select(.name == $name) | .status'
 }
 
-# Refuses to silently replace a currently-running sandbox (see the usage
-# comment above): asks for confirmation, honours --force, and refuses
-# outright rather than hanging if stdin isn't a terminal to ask on. Sets
-# the global $name directly (no subshell/command-substitution - keeps
-# `exit` here able to actually end the whole script, not just a subshell)
-# to a freshly minted alternative if "start a new one instead" is chosen;
-# leaves $name untouched otherwise. That alternative is only offered for
-# a resolved name ($2 = 1) - not for an explicit --name, which the human
-# already chose on purpose, so the only remaining question there is
-# whether to replace it or not.
+# Confirms before replacing a running sandbox (honours --force). Sets
+# $name directly rather than via command substitution, so `exit` here
+# still ends the whole script, not just a subshell.
 confirm_replace_if_running() {
   local target="$1" offer_new="$2" status choice
   status=$(sandbox_status "$target")
@@ -311,22 +114,9 @@ confirm_replace_if_running() {
   fi
 }
 
-# Resolves the default name against what's already running, rather than
-# picking blind: reuse the one existing sandbox for this repo if there's
-# exactly one (so --replace does its job across repeated invocations,
-# instead of a random suffix defeating it every time); ask which one if
-# there's more than one; only mint a fresh name when there's none yet.
-#
-# A freshly minted name always carries a `-sandbox` marker
-# (`<repo>-sandbox`, or `<repo>-sandbox-NNNN` once a collision forces the
-# random suffix): hostname==name (msb's own default, unset --hostname),
-# so this is what actually distinguishes the guest's prompt from the
-# host's - `container-base-sandbox` reads unambiguously as "not the
-# repo directory," where the bare repo name would not have. repo_name()
-# itself is untouched - it still means the repo's real identity, and
-# stays what the `repo=<repo_name>` label and matching_sandboxes() key
-# on, so an already-running sandbox is still found and reused by label
-# regardless of what its own display name happens to be.
+# Reuses the one existing sandbox for this repo if there's exactly one,
+# asks if there's more than one, mints `<repo>-sandbox` (or
+# `-sandbox-NNNN` on collision) if there's none yet.
 resolve_name() {
   local base matches count target choice
   base=$(repo_name)
@@ -431,13 +221,8 @@ if [ -z "$clone_url" ]; then
   fi
 fi
 
-# No command: an interactive shell, with a real tty, is this launcher's own
-# default (not the image's - see the comment block above). zsh, not bash:
-# every zsh invocation sources /etc/zsh/zshenv unconditionally (ADR-0010),
-# which is where the dev image's mise shims and Homebrew shellenv live, so
-# an interactive default shell gets the same PATH a human dev container
-# session would - bash would get none of it. A given command still runs
-# scripted, with no tty, as before.
+# No command: default to an interactive zsh, not bash - zsh alone sources
+# /etc/zsh/zshenv (ADR-0010), where the dev image's PATH additions live.
 tty_flag="--no-tty"
 if [ "$#" -eq 0 ]; then
   # Unset $persist_claude_auth means neither flag was given: default it

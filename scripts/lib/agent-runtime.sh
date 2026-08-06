@@ -3,9 +3,7 @@
 # Sourced, not executed - both scripts are the narrow ADR-0001/ADR-0014
 # exception; this file lives alongside them rather than widening it.
 
-# The repo a launch/cleanup invocation is acting on: git remote get-url
-# origin's basename, falling back to the toplevel directory name, falling
-# back to the current directory name outside any git repo.
+# Repo name: git remote's basename, else the toplevel dir, else $PWD.
 repo_name() {
   local repo
   if repo=$(git remote get-url origin 2>/dev/null); then
@@ -18,9 +16,7 @@ repo_name() {
   printf '%s' "$repo"
 }
 
-# The URL workspace-init clones from by default: git remote get-url
-# origin, verbatim. Unlike repo_name() this has no fallback - a clone
-# needs a real URL, and there is no sane default once origin is absent.
+# git remote get-url origin, verbatim - no fallback, a clone needs a real URL.
 repo_url() {
   git remote get-url origin
 }
