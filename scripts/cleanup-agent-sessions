@@ -1,46 +1,18 @@
 #!/usr/bin/env bash
-# Removes every stopped agent-runtime sandbox for this repo (or, with
-# --name, just one specific sandbox), along with its paired per-session
-# /var/lib/docker volume (scripts/launch-agent-runtime's own naming:
-# <session-name>-docker-data) - the disk half of a session that nothing
-# else cleans up automatically, now that each session gets its own volume
-# rather than sharing one global default (a stopped sandbox and its volume
-# otherwise just sit there consuming disk space indefinitely).
-#
-# Does not touch --persist-claude-auth's own volume (CLAUDE_AUTH_VOLUME):
-# that state is deliberately shared across every session for this operator,
-# not per-session, so removing a session's sandbox here must not remove it -
-# `msb volume remove agent-claude-creds` by hand, if you want to reset that
-# credential (this also clears ~/.claude.json, issue #54: it lives inside
-# the same volume now, not a separate host file).
-#
-# Without --name, matches on the `repo=<repo-name>` label
-# scripts/launch-agent-runtime attaches at launch, the same label it uses
-# for its own matching - not a name-prefix guess. A sandbox created before
-# that label existed, or with a hand-rolled `msb run` bypassing the
-# launcher entirely, won't be found that way; --name targets it directly
-# instead.
-#
-# Never touches a running sandbox unless --force says so: it isn't a
-# stopped one to begin with, so without --name there's nothing here to
-# reconcile with the running-sandbox confirmation the launcher itself
-# already does.
+# Removes stopped agent-runtime sandboxes for this repo (or, with --name,
+# one specific sandbox) along with each one's paired
+# <session-name>-docker-data volume. Never touches CLAUDE_AUTH_VOLUME
+# (default: agent-claude-creds), which is shared across sessions - remove
+# it by hand with `msb volume remove` if needed.
 #
 # Usage:
 #   scripts/cleanup-agent-sessions [--name SESSION] [--dry-run] [--force]
 #
-#   --name SESSION   remove only this one sandbox (and its volume) instead
-#                    of every stopped sandbox for this repo. Doesn't need
-#                    to carry this repo's label - naming it explicitly is
-#                    already deliberate, the same reasoning
-#                    launch-agent-runtime's own --name uses. Still
-#                    refused if it's currently running, unless --force.
+#   --name SESSION   remove only this one sandbox and its volume, running
+#                    or not (running requires --force too)
 #   --dry-run        list what would be removed, without removing anything
-#                    or asking for confirmation
-#   --force          skip the confirmation prompt (for scripted use); also
-#                    what lets --name remove a currently-running sandbox.
-#                    Refused outright rather than hanging if stdin isn't a
-#                    terminal to ask on and --force wasn't given
+#   --force          skip the confirmation prompt; also required to
+#                    remove a running --name sandbox
 
 set -eo pipefail
 
