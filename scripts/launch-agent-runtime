@@ -97,11 +97,10 @@
 #                        host-visible error, and anything not on a mounted
 #                        volume dies with the sandbox. 4G is a fixed
 #                        default, not a per-host formula: comfortable
-#                        headroom above measured real-world peak usage
-#                        (well under 4G on an 8GB host, issue #52) while
-#                        still fitting total RAM on the smallest hosts
-#                        tested. Bump with an explicit --memory if a
-#                        heavier workload's own measurement needs it.
+#                        headroom above measured real-world peak usage,
+#                        while still fitting total RAM on the smallest
+#                        hosts tested. Bump with an explicit --memory if
+#                        a heavier workload's own measurement needs it.
 #   --cpus N             forwarded verbatim to `msb run --cpus`
 #                        (default: 4, for the same reason and against the
 #                        same measurement as --memory above).
