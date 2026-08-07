@@ -262,8 +262,14 @@ if [ "$persist_claude_auth" = "1" ]; then
   )
 fi
 
+# Pins network egress explicitly (public reachable, LAN denied) instead
+# of relying on msb's implicit default, which silently reverts to no
+# egress at all the moment any other --net-rule is added below. A
+# hostname allowlist was rejected: this workload's own egress isn't
+# enumerable (apt, GHCR, npm, GitHub, ...). See ADR-0013.
 exec msb run --replace "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
   --memory "$memory" --cpus "$cpus" --max-memory "$max_memory" \
+  --net public \
   "${secrets[@]}" \
   "${violation_flag[@]}" \
   --mount-named "${DOCKER_DATA_VOLUME}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
