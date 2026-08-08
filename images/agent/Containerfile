@@ -1,7 +1,14 @@
 # The agent runtime is a published image variant (ADR-0014), built on the
 # same published dev image every consumer builds on, pinned here the same
 # way .devcontainer/Containerfile pins it so Renovate owns the bump.
-FROM ghcr.io/afrossard/container-base:0.0.3-dev
+FROM ghcr.io/afrossard/container-base:0.0.7-dev
+
+# The base image now defaults to vscode, not root (issue #17). This image
+# stays root throughout its own build and ships with no final USER of its
+# own, deliberately: dockerd needs root to start, and the entrypoint below
+# is what performs the actual drop to vscode at runtime, via runuser, once
+# the daemon is up - never via a baked-in USER instruction (ADR-0014).
+USER root
 
 # The docker-in-docker devcontainer feature (images/agent/devcontainer.json)
 # installs the engine itself - docker-ce, containerd, buildx, and iptables,
