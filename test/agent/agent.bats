@@ -123,6 +123,36 @@ teardown() {
   [[ "$output" == *"layer3"* ]]
 }
 
+# Issue #66. There is no service manager in the guest, so dpkg cannot
+# restart the containerd docker-init.sh already started; an in-session
+# upgrade of containerd.io therefore leaves an old daemon forking a new
+# containerd-shim-runc-v2, which breaks every `docker run` for the rest of
+# the boot. The failure names nothing recognizable ("failed to create TTRPC
+# connection: unsupported protocol: Yunix"), so it is worth catching here
+# rather than in a session.
+@test "the docker engine packages are held against in-session upgrades" {
+  run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" apt-mark showhold
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"containerd.io"* ]]
+  [[ "$output" == *"docker-ce"* ]]
+  [[ "$output" == *"docker-ce-cli"* ]]
+}
+
+# The regression test proper for #66, run through the door the bug actually
+# came through rather than asserting on the hold alone: a real upgrade, then
+# a real container. This one goes red on the bug itself, not just on the
+# mechanism chosen to fix it, which is why it pays for a full apt upgrade.
+@test "a docker run still works after an in-session apt upgrade" {
+  run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" sh -c '
+    set -e
+    sudo apt-get update -qq >/dev/null
+    sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq >/dev/null
+    docker run --rm alpine echo container-ok-after-upgrade
+  '
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"container-ok-after-upgrade"* ]]
+}
+
 @test "tini is PID 1, reaping dockerd" {
   run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" \
     sh -c 'ps -o pid,comm -p 1'

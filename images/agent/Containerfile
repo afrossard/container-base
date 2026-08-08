@@ -19,6 +19,26 @@ RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
     && rm -rf /var/lib/apt/lists/*
 
+# The engine's version is a property of this image, not something a session
+# may change (ADR-0014: the image is the guest). Without this hold, a plain
+# `apt-get upgrade` inside a live guest breaks `docker run` for the rest of
+# the boot (issue #66): dpkg replaces containerd-shim-runc-v2 on disk, but
+# there is no service manager here to restart the containerd docker-init.sh
+# already started, so the old daemon then forks the new shim and fails to
+# parse its start response - surfacing as the unrecognizable "failed to
+# create TTRPC connection: unsupported protocol: Yunix". Renovate owns the
+# bump at build time instead. The cost is that a session cannot pick up a
+# docker security update in place, which is the right trade for a runtime
+# that is discarded at the end of the session.
+#
+# These three are the whole apt-managed engine: the feature installs buildx
+# and compose as downloaded binaries under /usr/libexec/docker/cli-plugins,
+# not as packages (`dpkg -S` finds no owner), so naming the plugin packages
+# here would only make the build fail on an uninstalled package. The
+# `docker-compose-plugin` package that is installed is a client plugin the
+# downloaded binary already shadows, and cannot affect the daemon.
+RUN apt-mark hold docker-ce docker-ce-cli containerd.io
+
 COPY entrypoint /usr/local/bin/agent-entrypoint
 RUN chmod 0755 /usr/local/bin/agent-entrypoint
 
