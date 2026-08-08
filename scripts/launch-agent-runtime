@@ -10,8 +10,9 @@
 #   --name SESSION       sandbox name (default: <repo>-sandbox). Reuses a
 #                        matching sandbox by its `repo=<repo>` label;
 #                        prompts if more than one matches.
-#   --image REF          agent image to launch
-#                        (default: ghcr.io/afrossard/container-base:0.0.5-agent)
+#   --image REF          agent image to launch (default: the pinned
+#                        -agent image in `image=` below, which Renovate
+#                        bumps; not repeated here, so it cannot drift)
 #   --secret ENV@HOST    forwarded to `msb run --secret` (repeatable); ENV
 #                        is a host env var name, not a literal value
 #   --on-secret-violation ACTION
@@ -51,7 +52,7 @@ source "$script_dir/lib/agent-runtime.sh"
 
 : "${DOCKER_DATA_SIZE:=20G}"
 
-image="ghcr.io/afrossard/container-base:0.0.8-agent"
+image="ghcr.io/afrossard/container-base:0.0.9-agent"
 name=""
 force=0
 persist_claude_auth=""
