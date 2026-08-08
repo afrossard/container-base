@@ -15,6 +15,29 @@ if [ "$#" -eq 0 ]; then
   exit 1
 fi
 
+# The engine's version is a property of this image, not something a session
+# may change (ADR-0014: the image is the guest). Without this hold, a plain
+# `apt-get upgrade` inside a live guest breaks `docker run` for the rest of
+# the boot (issue #66): dpkg replaces containerd-shim-runc-v2 on disk, but
+# nothing here can restart the containerd docker-init.sh is about to start,
+# so the old daemon then forks the new shim and fails to parse its start
+# response - surfacing as the unrecognizable "failed to create TTRPC
+# connection: unsupported protocol: Yunix". Renovate owns the bump at build
+# time instead. The cost is that a session cannot pick up a docker security
+# update in place, which is the right trade for a runtime that is discarded
+# at the end of the session.
+#
+# This is here rather than in the Containerfile because `devcontainer build`
+# builds the Containerfile *first* and applies the features on top of the
+# result, so at Containerfile time the engine does not exist yet - the hold
+# fails on an unknown package, and a hold that did somehow land would block
+# the feature's own install a moment later. Runtime is the first point where
+# the packages are guaranteed present, and it is still before any command
+# the session runs. Only the apt-managed engine is named: the feature
+# installs buildx and compose as downloaded binaries under
+# /usr/libexec/docker/cli-plugins, not as packages.
+apt-mark hold docker-ce docker-ce-cli containerd.io >/dev/null
+
 # docker-init.sh's cgroup v2 nesting step (vendored from Moby's own
 # hack/dind) moves every PID already in the root cgroup into a child
 # cgroup, one write() per PID; Moby's own comment already calls a failed
