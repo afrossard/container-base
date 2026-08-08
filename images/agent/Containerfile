@@ -1,7 +1,7 @@
 # The agent runtime is a published image variant (ADR-0014), built on the
 # same published dev image every consumer builds on, pinned here the same
 # way .devcontainer/Containerfile pins it so Renovate owns the bump.
-FROM ghcr.io/afrossard/container-base:0.0.3-dev
+FROM ghcr.io/afrossard/container-base:0.0.6-dev
 
 # The docker-in-docker devcontainer feature (images/agent/devcontainer.json)
 # installs the engine itself - docker-ce, containerd, buildx, and iptables,
