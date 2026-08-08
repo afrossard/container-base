@@ -20,6 +20,12 @@ setup_file() {
   [ "$shell" = "/bin/zsh" ]
 }
 
+@test "the default user, with no --user given, is uid 1000" {
+  run docker run --rm "$IMAGE" id -u
+  [ "$status" -eq 0 ]
+  [ "$output" = "1000" ]
+}
+
 @test "vscode has passwordless sudo" {
   run docker run --rm --user vscode "$IMAGE" sudo -n whoami
   [ "$status" -eq 0 ]
