@@ -51,7 +51,7 @@ source "$script_dir/lib/agent-runtime.sh"
 
 : "${DOCKER_DATA_SIZE:=20G}"
 
-image="ghcr.io/afrossard/container-base:0.0.5-agent"
+image="ghcr.io/afrossard/container-base:0.0.6-agent"
 name=""
 force=0
 persist_claude_auth=""
