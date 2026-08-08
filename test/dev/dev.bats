@@ -68,7 +68,10 @@ setup_file() {
 }
 
 @test "the mise shims directory is prepended to sudo's secure_path" {
-  run docker run --rm "$IMAGE" grep secure_path /etc/sudoers
+  # /etc/sudoers is 0440 root:root (issue #17 made vscode the default user,
+  # so root must be requested explicitly here, unlike the plain stat check
+  # above).
+  run docker run --rm --user root "$IMAGE" grep secure_path /etc/sudoers
   [ "$status" -eq 0 ]
   [[ "$output" == *'secure_path="/usr/local/share/mise/shims:'* ]]
 }
