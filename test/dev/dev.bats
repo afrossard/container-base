@@ -20,6 +20,12 @@ setup_file() {
   [ "$shell" = "/bin/zsh" ]
 }
 
+@test "the default user, with no --user given, is uid 1000" {
+  run docker run --rm "$IMAGE" id -u
+  [ "$status" -eq 0 ]
+  [ "$output" = "1000" ]
+}
+
 @test "vscode has passwordless sudo" {
   run docker run --rm --user vscode "$IMAGE" sudo -n whoami
   [ "$status" -eq 0 ]
@@ -62,7 +68,10 @@ setup_file() {
 }
 
 @test "the mise shims directory is prepended to sudo's secure_path" {
-  run docker run --rm "$IMAGE" grep secure_path /etc/sudoers
+  # /etc/sudoers is 0440 root:root (issue #17 made vscode the default user,
+  # so root must be requested explicitly here, unlike the plain stat check
+  # above).
+  run docker run --rm --user root "$IMAGE" grep secure_path /etc/sudoers
   [ "$status" -eq 0 ]
   [[ "$output" == *'secure_path="/usr/local/share/mise/shims:'* ]]
 }

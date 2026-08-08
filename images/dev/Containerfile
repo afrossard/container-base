@@ -124,3 +124,23 @@ RUN install -d -m 0755 /etc/apt/keyrings \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends claude-code \
     && rm -rf /var/lib/apt/lists/* /root/.gnupg
+
+# vscode, not root, is this image's default (issue #17): a plain `docker run`
+# or an agent using the image directly, rather than through `devcontainer
+# up`, would otherwise land as root, which is the state Claude Code rejects
+# `--dangerously-skip-permissions` in. vscode itself doesn't exist yet at
+# this point in the build - the common-utils feature below creates it - so
+# this is a forward reference. It resolves correctly: the devcontainer CLI
+# reads this Containerfile's own final USER before applying any feature,
+# carries it through the feature-install layers (which still run as root,
+# since installers like this one need it) as the generated wrapper
+# Dockerfile's `_DEV_CONTAINERS_IMAGE_USER` build arg, and restores it as
+# the very last instruction. Confirmed on a scratch devcontainer.json/
+# Containerfile pair built with `devcontainer build` and inspected via
+# `docker inspect --format '{{.Config.User}}'`, not assumed - ADR-0014's
+# similar claim, that a build-time USER instruction doesn't survive feature
+# application, does not hold here. A Containerfile that builds FROM this
+# image to add tools inherits vscode as its default user too, and must
+# `USER root` before `apt-get` - the standard devcontainer pattern, but a
+# behavior change for anyone already building on top.
+USER vscode
