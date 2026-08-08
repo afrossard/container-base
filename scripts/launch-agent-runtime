@@ -4,7 +4,7 @@
 #
 # Usage:
 #   scripts/launch-agent-runtime [--name SESSION] [--image REF] \
-#     [--clone-url URL] [--secret ENV@HOST]... \
+#     [--clone-url URL] [--github-token ENV] [--secret ENV@HOST]... \
 #     [--memory SIZE] [--cpus N] [--max-memory SIZE] [-- COMMAND...]
 #
 #   --name SESSION       sandbox name (default: <repo>-sandbox). Reuses a
@@ -13,6 +13,16 @@
 #   --image REF          agent image to launch (default: the pinned
 #                        -agent image in `image=` below, which Renovate
 #                        bumps; not repeated here, so it cannot drift)
+#   --github-token ENV   inject a GitHub token scoped to both hosts a
+#                        session needs: github.com for git, api.github.com
+#                        for gh. ENV is a host env var name, not a literal
+#                        value. Scoping to github.com alone leaves every gh
+#                        command failing with "the token is invalid", so
+#                        prefer this over spelling the scope out by hand
+#                        (issue #77). Implies --on-secret-violation
+#                        block-and-log unless that flag is given explicitly.
+#                        Give it at most once; a second one replaces the
+#                        first, since one session has one GitHub identity.
 #   --secret ENV@HOST    forwarded to `msb run --secret` (repeatable); ENV
 #                        is a host env var name, not a literal value
 #   --on-secret-violation ACTION
@@ -57,6 +67,7 @@ name=""
 force=0
 persist_claude_auth=""
 clone_url=""
+github_token_env=""
 secrets=()
 violation_flag=()
 memory="4G"
@@ -163,6 +174,28 @@ while [ "$#" -gt 0 ]; do
       image="$2"
       shift 2
       ;;
+    --github-token)
+      # Takes the NAME of a variable, and `--github-token "$GH_TOKEN"` is
+      # the obvious slip - it would put the real token in this process's
+      # own argv, readable by anyone who can run `ps`, and then hand it to
+      # msb as a host to scope against. Neither check may echo what it
+      # rejected, since the rejected thing is exactly what must not be
+      # printed. A charset check alone would not catch it (real tokens are
+      # identifier-shaped: `ghp_...`, `github_pat_...`), so the load-bearing
+      # half is the second: a token value is not a variable that is set.
+      case "$2" in
+        '' | [0-9]* | *[!A-Za-z0-9_]*)
+          echo "launch-agent-runtime: --github-token takes the name of a host environment variable (e.g. GH_TOKEN), not a token value" >&2
+          exit 1
+          ;;
+      esac
+      if ! printenv "$2" >/dev/null 2>&1; then
+        echo "launch-agent-runtime: --github-token names an environment variable that is not set (and it takes the variable's name, not the token value itself)" >&2
+        exit 1
+      fi
+      github_token_env="$2"
+      shift 2
+      ;;
     --secret)
       secrets+=(--secret "$2")
       shift 2
@@ -214,6 +247,24 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+# Why two hosts is in the --github-token usage text above, not repeated here.
+# Expanded after the parse loop rather than inside it so the violation
+# default below can see whether --on-secret-violation was given, whichever
+# order the two flags arrived in.
+if [ -n "$github_token_env" ]; then
+  secrets+=(--secret "${github_token_env}@github.com,api.github.com")
+
+  # Applies the recommendation the --on-secret-violation help text already
+  # makes, and only when the caller expressed no preference of their own.
+  # Note this tightens the default rather than widening it: quietly adding
+  # a host to a secret's scope would hide a security-relevant fact from the
+  # command a reader typed, which is why --secret is deliberately left to
+  # mean exactly what it says and this flag is a separate, visible opt-in.
+  if [ "${#violation_flag[@]}" -eq 0 ]; then
+    violation_flag=(--on-secret-violation block-and-log)
+  fi
+fi
 
 if [ -z "$clone_url" ]; then
   if ! clone_url=$(repo_url); then
