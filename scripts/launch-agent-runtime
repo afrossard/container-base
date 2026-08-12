@@ -74,7 +74,7 @@ force=0
 persist_claude_auth=""
 clone_url=""
 github_token_env=""
-github_token_prompt=0
+github_token_from_stdin=0
 secrets=()
 violation_flag=()
 memory="4G"
@@ -187,7 +187,7 @@ while [ "$#" -gt 0 ]; do
       # as intent only, so it needs no lookahead: `-` is an ordinary value
       # as far as the parser is concerned.
       if [ "$2" = "-" ]; then
-        github_token_prompt=1
+        github_token_from_stdin=1
         shift 2
         continue
       fi
@@ -210,6 +210,7 @@ while [ "$#" -gt 0 ]; do
         exit 1
       fi
       github_token_env="$2"
+      github_token_from_stdin=0
       shift 2
       ;;
     --secret)
@@ -307,18 +308,30 @@ echo "launch-agent-runtime: session name: $name" >&2
 # prompted token under a tidier internal name would leave `gh` unable to
 # find it - the exact failure this flag exists to remove. Exporting here
 # touches only this process's own environment, never the caller's shell.
-if [ "$github_token_prompt" = "1" ]; then
+if [ "$github_token_from_stdin" = "1" ]; then
+  # Both branches read the same way and guard the same failure, differing
+  # only in whether they prompt and hide. `|| true` because read reports
+  # EOF in two ordinary situations - input whose last line carries no
+  # trailing newline (piping from a password manager), and Ctrl-D at the
+  # prompt - and `set -e` would otherwise kill the launch outright: in the
+  # tty case without printing anything at all, not even the newline that
+  # ends the prompt line. Emptiness is checked below either way, so the
+  # deliberate Ctrl-D and the truncated pipe get the same diagnostic.
   if [ -t 0 ]; then
     printf 'GitHub token (input hidden): ' >&2
-    read -rs prompted_token
+    IFS= read -rs prompted_token || true
     printf '\n' >&2
   else
-    # `|| true` because read reports EOF when the last line carries no
-    # trailing newline, which `set -e` would otherwise treat as fatal even
-    # though the token was read fine - piping from a password manager is
-    # exactly where that happens. Emptiness is checked below regardless.
     IFS= read -r prompted_token || true
   fi
+
+  # A token piped from a CRLF source arrives with a trailing carriage
+  # return, and one pasted by hand often carries surrounding spaces.
+  # Neither is part of any GitHub token, and forwarding either produces an
+  # "invalid token" inside the guest - the same failure, and the same
+  # misdirection, that issue #77 exists to remove. `[:space:]` covers \r.
+  prompted_token="${prompted_token#"${prompted_token%%[![:space:]]*}"}"
+  prompted_token="${prompted_token%"${prompted_token##*[![:space:]]}"}"
 
   if [ -z "$prompted_token" ]; then
     echo "launch-agent-runtime: --github-token - read an empty token" >&2

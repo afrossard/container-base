@@ -26,6 +26,11 @@ setup() {
   stub_dir="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$stub_dir"
   export MSB_ARGS_FILE="$BATS_TEST_TMPDIR/msb-args"
+  # The stub records the GH_TOKEN it inherits as well as its arguments.
+  # Without this, nothing would notice if the launcher stopped exporting a
+  # stdin-supplied token: the forwarded *name* would still look right while
+  # msb had no value to resolve.
+  export MSB_ENV_FILE="$BATS_TEST_TMPDIR/msb-env"
 
   # The launcher now requires --github-token to name a variable that is
   # actually set, so that a literal token value is rejected rather than
@@ -46,6 +51,7 @@ case "$1" in
     ;;
   run)
     printf '%s\n' "$@" > "$MSB_ARGS_FILE"
+    printf '%s' "$GH_TOKEN" > "$MSB_ENV_FILE"
     exit 0
     ;;
   *)
@@ -202,6 +208,46 @@ has_flag_value() {
   run launch --github-token - < /dev/null
   [ "$status" -ne 0 ]
   [ ! -f "$MSB_ARGS_FILE" ]
+}
+
+# Forwarding the right name is only half the job: msb resolves that name
+# against the launcher's own environment, so a stdin-supplied token has to
+# actually be exported there. GH_TOKEN is unset first, or setup()'s own
+# export would mask a launcher that stopped exporting anything.
+@test "a stdin-supplied token reaches the environment msb inherits" {
+  unset GH_TOKEN
+  run launch --github-token - <<< "piped-token-value"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$MSB_ENV_FILE")" = "piped-token-value" ]
+}
+
+# A token piped from a CRLF file, or pasted with a stray space, would
+# otherwise be forwarded intact and rejected inside the guest as an invalid
+# token - the misdirection this whole issue is about.
+@test "a piped token loses a trailing carriage return and surrounding spaces" {
+  unset GH_TOKEN
+  run launch --github-token - < <(printf ' goodtoken \r\n')
+  [ "$status" -eq 0 ]
+  [ "$(cat "$MSB_ENV_FILE")" = "goodtoken" ]
+}
+
+# The usage text promises "a second one replaces the first". That has to
+# hold across the two forms, not just within each of them, or whichever
+# form the code happens to favour wins over whatever the operator typed.
+@test "a later --github-token name replaces an earlier -" {
+  export NAMED_TOKEN_VAR="named-value"
+  run launch --github-token - --github-token NAMED_TOKEN_VAR <<< "piped-token-value"
+  [ "$status" -eq 0 ]
+  has_flag_value "--secret" "NAMED_TOKEN_VAR@github.com,api.github.com"
+  ! has_arg "GH_TOKEN@github.com,api.github.com"
+}
+
+@test "a later --github-token - replaces an earlier name" {
+  export NAMED_TOKEN_VAR="named-value"
+  run launch --github-token NAMED_TOKEN_VAR --github-token - <<< "piped-token-value"
+  [ "$status" -eq 0 ]
+  has_flag_value "--secret" "GH_TOKEN@github.com,api.github.com"
+  ! has_arg "NAMED_TOKEN_VAR@github.com,api.github.com"
 }
 
 @test "--github-token - is not mistaken for a variable named -" {
