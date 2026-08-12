@@ -165,6 +165,51 @@ has_flag_value() {
   ! has_arg "--on-secret-violation"
 }
 
+# `--github-token -` reads the token itself rather than naming a variable
+# that holds it, so the operator never has to export anything. Only the
+# non-tty half is testable here; the prompt branch needs a real terminal
+# and is checked live instead.
+@test "--github-token - reads the token from stdin and forwards a name" {
+  run launch --github-token - <<< "piped-token-value"
+  [ "$status" -eq 0 ]
+  has_flag_value "--secret" "GH_TOKEN@github.com,api.github.com"
+}
+
+# The whole point of forwarding a name is that the value never reaches the
+# command line, where `ps` would show it.
+@test "a piped token never appears in the msb command line" {
+  run launch --github-token - <<< "piped-token-value"
+  [ "$status" -eq 0 ]
+  ! grep -q "piped-token-value" "$MSB_ARGS_FILE"
+}
+
+@test "--github-token - still applies the recommended violation action" {
+  run launch --github-token - <<< "piped-token-value"
+  [ "$status" -eq 0 ]
+  has_flag_value "--on-secret-violation" "block-and-log"
+}
+
+# `read` returns non-zero at EOF when the input has no trailing newline,
+# which under `set -e` would kill the script even though the variable was
+# populated. Piping from a password manager is exactly where that happens.
+@test "a piped token without a trailing newline still works" {
+  run launch --github-token - < <(printf 'no-trailing-newline')
+  [ "$status" -eq 0 ]
+  has_flag_value "--secret" "GH_TOKEN@github.com,api.github.com"
+}
+
+@test "--github-token - with nothing on stdin fails before launching" {
+  run launch --github-token - < /dev/null
+  [ "$status" -ne 0 ]
+  [ ! -f "$MSB_ARGS_FILE" ]
+}
+
+@test "--github-token - is not mistaken for a variable named -" {
+  run launch --github-token - <<< "piped-token-value"
+  [ "$status" -eq 0 ]
+  ! has_arg "-@github.com,api.github.com"
+}
+
 @test "--github-token is documented in --help" {
   run "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" --help
   [ "$status" -eq 0 ]
