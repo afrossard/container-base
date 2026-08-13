@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Commit messages
+
+Conventional Commits, mandatory - the commit type computes the release version bump (ADR-0018).
+See `CONTRIBUTING.md`; since PRs squash-merge, the PR title is what must conform.
+
 ## Status
 
 `images/dev/` holds the walking skeleton from issue #2: `devcontainer.json` and `Containerfile`, built on `debian:trixie-slim` with the `common-utils` feature pinned via the committed `devcontainer-lock.json`.
