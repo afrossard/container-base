@@ -4,7 +4,7 @@
 #
 # Usage:
 #   scripts/launch-agent-runtime [--name SESSION] [--image REF] \
-#     [--clone-url URL] [--secret ENV@HOST]... \
+#     [--clone-url URL] [--github-token ENV|-] [--secret ENV@HOST]... \
 #     [--memory SIZE] [--cpus N] [--max-memory SIZE] [-- COMMAND...]
 #
 #   --name SESSION       sandbox name (default: <repo>-sandbox). Reuses a
@@ -13,6 +13,22 @@
 #   --image REF          agent image to launch (default: the pinned
 #                        -agent image in `image=` below, which Renovate
 #                        bumps; not repeated here, so it cannot drift)
+#   --github-token ENV   inject a GitHub token scoped to both hosts a
+#                        session needs: github.com for git, api.github.com
+#                        for gh. ENV is a host env var name, not a literal
+#                        value. Scoping to github.com alone leaves every gh
+#                        command failing with "the token is invalid", so
+#                        prefer this over spelling the scope out by hand
+#                        (issue #77). Implies --on-secret-violation
+#                        block-and-log unless that flag is given explicitly.
+#                        Give it at most once; a second one replaces the
+#                        first, since one session has one GitHub identity.
+#                        Pass `-` instead of a name to supply the token
+#                        itself on stdin, so nothing need be exported:
+#                        prompted (hidden) when stdin is a terminal, read
+#                        as one line when it isn't, e.g.
+#                          launch-agent-runtime --github-token -
+#                          pass show gh/pat | launch-agent-runtime --github-token -
 #   --secret ENV@HOST    forwarded to `msb run --secret` (repeatable); ENV
 #                        is a host env var name, not a literal value
 #   --on-secret-violation ACTION
@@ -57,6 +73,8 @@ name=""
 force=0
 persist_claude_auth=""
 clone_url=""
+github_token_env=""
+github_token_from_stdin=0
 secrets=()
 violation_flag=()
 memory="4G"
@@ -163,6 +181,38 @@ while [ "$#" -gt 0 ]; do
       image="$2"
       shift 2
       ;;
+    --github-token)
+      # A literal `-` means "read the token itself, from stdin" - see the
+      # read further down for why it happens there and not here. Recorded
+      # as intent only, so it needs no lookahead: `-` is an ordinary value
+      # as far as the parser is concerned.
+      if [ "$2" = "-" ]; then
+        github_token_from_stdin=1
+        shift 2
+        continue
+      fi
+      # Takes the NAME of a variable, and `--github-token "$GH_TOKEN"` is
+      # the obvious slip - it would put the real token in this process's
+      # own argv, readable by anyone who can run `ps`, and then hand it to
+      # msb as a host to scope against. Neither check may echo what it
+      # rejected, since the rejected thing is exactly what must not be
+      # printed. A charset check alone would not catch it (real tokens are
+      # identifier-shaped: `ghp_...`, `github_pat_...`), so the load-bearing
+      # half is the second: a token value is not a variable that is set.
+      case "$2" in
+        '' | [0-9]* | *[!A-Za-z0-9_]*)
+          echo "launch-agent-runtime: --github-token takes the name of a host environment variable (e.g. GH_TOKEN), not a token value" >&2
+          exit 1
+          ;;
+      esac
+      if ! printenv "$2" >/dev/null 2>&1; then
+        echo "launch-agent-runtime: --github-token names an environment variable that is not set (and it takes the variable's name, not the token value itself)" >&2
+        exit 1
+      fi
+      github_token_env="$2"
+      github_token_from_stdin=0
+      shift 2
+      ;;
     --secret)
       secrets+=(--secret "$2")
       shift 2
@@ -247,6 +297,66 @@ fi
 # why "start a new one" is only offered for a resolved name).
 confirm_replace_if_running "$name" "$offer_new"
 echo "launch-agent-runtime: session name: $name" >&2
+
+# `--github-token -` reads the token here rather than in the parse loop, so
+# that aborting the replace prompt above doesn't mean having typed a secret
+# for a launch that never happened.
+#
+# The name is not free: whatever name is forwarded is the name the guest
+# sees (the value is a placeholder, the name is preserved), and `gh` inside
+# the guest reads GH_TOKEN or GITHUB_TOKEN and nothing else. Parking a
+# prompted token under a tidier internal name would leave `gh` unable to
+# find it - the exact failure this flag exists to remove. Exporting here
+# touches only this process's own environment, never the caller's shell.
+if [ "$github_token_from_stdin" = "1" ]; then
+  # Both branches read the same way and guard the same failure, differing
+  # only in whether they prompt and hide. `|| true` because read reports
+  # EOF in two ordinary situations - input whose last line carries no
+  # trailing newline (piping from a password manager), and Ctrl-D at the
+  # prompt - and `set -e` would otherwise kill the launch outright: in the
+  # tty case without printing anything at all, not even the newline that
+  # ends the prompt line. Emptiness is checked below either way, so the
+  # deliberate Ctrl-D and the truncated pipe get the same diagnostic.
+  if [ -t 0 ]; then
+    printf 'GitHub token (input hidden): ' >&2
+    IFS= read -rs prompted_token || true
+    printf '\n' >&2
+  else
+    IFS= read -r prompted_token || true
+  fi
+
+  # A token piped from a CRLF source arrives with a trailing carriage
+  # return, and one pasted by hand often carries surrounding spaces.
+  # Neither is part of any GitHub token, and forwarding either produces an
+  # "invalid token" inside the guest - the same failure, and the same
+  # misdirection, that issue #77 exists to remove. `[:space:]` covers \r.
+  prompted_token="${prompted_token#"${prompted_token%%[![:space:]]*}"}"
+  prompted_token="${prompted_token%"${prompted_token##*[![:space:]]}"}"
+
+  if [ -z "$prompted_token" ]; then
+    echo "launch-agent-runtime: --github-token - read an empty token" >&2
+    exit 1
+  fi
+
+  export GH_TOKEN="$prompted_token"
+  github_token_env="GH_TOKEN"
+fi
+
+# Both --github-token paths converge here on a variable name. Why the scope
+# names two hosts is in the usage text above, not repeated.
+if [ -n "$github_token_env" ]; then
+  secrets+=(--secret "${github_token_env}@github.com,api.github.com")
+
+  # Applies the recommendation the --on-secret-violation help text already
+  # makes, and only when the caller expressed no preference of their own.
+  # Note this tightens the default rather than widening it: quietly adding
+  # a host to a secret's scope would hide a security-relevant fact from the
+  # command a reader typed, which is why --secret is deliberately left to
+  # mean exactly what it says and this flag is a separate, visible opt-in.
+  if [ "${#violation_flag[@]}" -eq 0 ]; then
+    violation_flag=(--on-secret-violation block-and-log)
+  fi
+fi
 
 : "${DOCKER_DATA_VOLUME:=${name}-docker-data}"
 
