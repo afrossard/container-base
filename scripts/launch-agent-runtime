@@ -11,8 +11,9 @@
 #                        matching sandbox by its `repo=<repo>` label;
 #                        prompts if more than one matches.
 #   --image REF          agent image to launch (default: the pinned
-#                        -agent image in `image=` below, which Renovate
-#                        bumps; not repeated here, so it cannot drift)
+#                        -agent image in `image=` below, which
+#                        release-please bumps; not repeated here, so it
+#                        cannot drift)
 #   --github-token ENV   inject a GitHub token scoped to both hosts a
 #                        session needs: github.com for git, api.github.com
 #                        for gh. ENV is a host env var name, not a literal
@@ -68,7 +69,8 @@ source "$script_dir/lib/agent-runtime.sh"
 
 : "${DOCKER_DATA_SIZE:=20G}"
 
-image="ghcr.io/afrossard/container-base:0.0.9-agent"
+version="0.0.9" # x-release-please-version
+image="ghcr.io/afrossard/container-base:${version}-agent"
 name=""
 force=0
 persist_claude_auth=""

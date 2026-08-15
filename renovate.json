@@ -1,17 +1,4 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
-  "customManagers": [
-    {
-      "customType": "regex",
-      "description": "The launcher's default image tag is a third copy of the same pin the Dockerfile managers already bump (ADR-0004); Renovate's built-in managers don't parse shell variable assignments, so this keeps it in step by hand.",
-      "managerFilePatterns": ["/^scripts/launch-agent-runtime$/"],
-      "matchStrings": [
-        "image=\"ghcr\\.io/afrossard/container-base:(?<currentValue>[^\"]+)\"\n"
-      ],
-      "depNameTemplate": "container-base-agent",
-      "packageNameTemplate": "ghcr.io/afrossard/container-base",
-      "datasourceTemplate": "docker"
-    }
-  ]
+  "extends": ["config:recommended"]
 }

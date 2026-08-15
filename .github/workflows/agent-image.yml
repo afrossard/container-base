@@ -3,6 +3,7 @@ name: agent image
 on:
   pull_request:
     paths:
+      - images/dev/**
       - images/agent/**
       - test/agent/**
       - package.json
@@ -22,6 +23,10 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - run: npm run build:dev
+
+      - run: npm run tag:agent-base
 
       - run: npm run build:agent
 

@@ -1,7 +1,11 @@
 # The agent runtime is a published image variant (ADR-0014), built on the
-# same published dev image every consumer builds on, pinned here the same
-# way .devcontainer/Containerfile pins it so Renovate owns the bump.
-FROM ghcr.io/afrossard/container-base:0.0.7-dev
+# same published dev image every consumer builds on. release-please owns
+# this pin (ADR-0018), bumping it in step with every release rather than
+# one tag late.
+# x-release-please-start-version
+ARG BASE_VERSION=0.0.9
+# x-release-please-end
+FROM ghcr.io/afrossard/container-base:${BASE_VERSION}-dev
 
 # The base image now defaults to vscode, not root (issue #17). This image
 # stays root throughout its own build and ships with no final USER of its

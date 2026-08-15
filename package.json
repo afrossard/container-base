@@ -15,11 +15,13 @@
     "test:dev": "IMAGE=$npm_package_config_devImage bats test/dev",
     "publish:dev": "devcontainer build --workspace-folder . --config images/dev/devcontainer.json --frozen-lockfile --platform linux/amd64,linux/arm64 --push --image-name $IMAGE",
     "verify:publish-dev": "bats test/publish-dev",
+    "tag:agent-base": ".github/scripts/tag-agent-base.sh $npm_package_config_devImage images/agent/Containerfile",
     "build:agent": "devcontainer build --workspace-folder . --config images/agent/devcontainer.json --frozen-lockfile --image-name $npm_package_config_agentImage",
     "test:agent": "IMAGE=$npm_package_config_agentImage bats test/agent",
     "publish:agent": "devcontainer build --workspace-folder . --config images/agent/devcontainer.json --frozen-lockfile --platform linux/amd64,linux/arm64 --push --image-name $IMAGE",
     "verify:publish-agent": "bats test/publish-agent",
-    "test:launcher": "bats test/launcher"
+    "test:launcher": "bats test/launcher",
+    "test:scripts": "bats test/scripts"
   },
   "devDependencies": {
     "@devcontainers/cli": "^0.88.0",

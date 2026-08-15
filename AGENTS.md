@@ -9,7 +9,7 @@ See `CONTRIBUTING.md`; since PRs squash-merge, the PR title is what must conform
 
 `images/dev/` holds the walking skeleton from issue #2: `devcontainer.json` and `Containerfile`, built on `debian:trixie-slim` with the `common-utils` feature pinned via the committed `devcontainer-lock.json`.
 CI (`.github/workflows/dev-image.yml`) builds it with `--frozen-lockfile` and runs the bats suite in `test/dev/` on every pull request.
-Published multi-arch to GHCR on a git tag (issue #3, `.github/workflows/publish-dev-image.yml`).
+Published multi-arch to GHCR on a git tag (issue #3); publishing now happens from `.github/workflows/release.yml`, gated on a release-please-created release rather than a hand-cut tag (ADR-0018).
 `uv` and `mise` are wired in system-wide (issue #4): `uv` via `COPY --from=ghcr.io/astral-sh/uv`, `mise` via its apt repository, `mise`'s data directory moved to `/usr/local/share/mise` and vscode-owned, shims on `PATH` and prepended to sudo's `secure_path`.
 Neither installer touches `$HOME`.
 Homebrew and starship are wired in system-wide (issue #5): Homebrew's installer runs as root during the build (its own container check needs a faked `/.dockerenv`, since BuildKit `RUN` steps don't set one up), the prefix at `/home/linuxbrew/.linuxbrew` is chowned to the eventual vscode uid/gid, and `brew shellenv`'s output is appended to `/etc/zsh/zshenv`.
@@ -57,7 +57,7 @@ That workflow is deliberately unfiltered rather than scoped to `scripts/**` the 
 It also declares `permissions: contents: read`, which both publish workflows already do and the three older pull-request workflows still do not.
 The file could not be pushed by the session that wrote the suite, since GitHub gates any push touching `.github/workflows/` behind a PAT scope that session's token lacked - the same constraint issue #37 hit, and the same resolution, which was to hand it to a more-privileged actor.
 Two things a stub cannot settle were handled separately: that the guest holds only a placeholder was verified by a live launch with a dummy token (the guest's env var came back holding msb's own synthetic stand-in value, never the sentinel - written here without the literal string per issue #87), while that `gh` actually authenticates against the scoped hosts still needs a live launch with a real token and is recorded as open in issue #77.
-CI (`.github/workflows/agent-image.yml`) builds and tests the `-agent` image the same way `dev-image.yml` does, and both publish workflows now skip a variant's rebuild entirely if its own `images/*` directory didn't change since the previous tag (`.github/scripts/changed-since-last-tag.sh`, ADR-0004), verified on a real tag where neither variant had changed and both correctly skipped.
+CI (`.github/workflows/agent-image.yml`) builds and tests the `-agent` image the same way `dev-image.yml` does; ADR-0018 later retired the skip-if-unchanged rule this line used to describe, so `agent-image.yml` now builds the dev image fresh from the same commit, tags it locally as the pinned base, and always builds and tests the agent image on it, unconditionally.
 README.md and CONTEXT.md describe three published variants; `0.0.4-agent` is the first real published `-agent` image.
 
 With the image and the launcher in place, a grilling session settled how the runtime is actually used, producing three ADRs and the issue backlog that implements them.
