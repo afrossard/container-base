@@ -18,9 +18,11 @@
 #
 # What a stub cannot check is whether msb honours what it was handed. That
 # the guest holds only a placeholder was verified separately by a live
-# launch with a dummy token (it came back as the literal $MSB_GH_TOKEN);
-# that `gh` actually authenticates against the scoped hosts needs a live
-# launch with a real token, and is recorded as such in issue #77.
+# launch with a dummy token (it came back as msb's own synthetic stand-in
+# value, not the sentinel - written here without the literal string per
+# issue #87); that `gh` actually authenticates against the scoped hosts
+# needs a live launch with a real token, and is recorded as such in issue
+# #77.
 
 setup() {
   stub_dir="$BATS_TEST_TMPDIR/bin"
