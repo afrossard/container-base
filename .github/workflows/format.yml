@@ -1,3 +1,7 @@
+# Deliberately no `paths` filter, unlike dev-image.yml/agent-image.yml.
+# A required check gated by a path filter that skips it reports pending
+# forever and blocks the merge (GitHub does not treat a skipped required
+# check as satisfied), so this stays the one check safe to mark required.
 name: format
 
 on:
