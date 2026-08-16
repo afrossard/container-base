@@ -13,6 +13,9 @@
 # across separate `docker run` invocations, so each test builds on the
 # previous one's state - the same progression ADR-0009's measurement table
 # walks through.
+#
+# Unreliable specifically when run from inside this repo's own workspace
+# devcontainer, not a regression - see docs/agents/gotchas.md.
 
 setup_file() {
   : "${IMAGE:?set IMAGE to the image tag built by \`npm run build:dev\`}"
