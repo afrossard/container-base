@@ -61,6 +61,11 @@ Both are host-side tooling, not container images - a narrow, documented exceptio
 One unit of autonomous agent work, bounded by the lifetime of the agent runtime it runs in.
 Disposing of the runtime ends the session and everything it accumulated, apart from what was pushed to the remote.
 
+**Session tooling**:
+The tools an agent session installs inside the runtime for its own workflow, at the session's cadence rather than the image's.
+It is never baked, because its update cadence outruns image releases; the image carries only what is stable across sessions.
+_Avoid_: agent tooling - too easily read as the tooling that runs the agent (the image, the launcher), rather than what the session installs for itself.
+
 **Workspace**:
 The clone of one repo an agent session works in, made inside the agent runtime at launch and destroyed with it.
 It enters as a full clone and leaves as a pushed branch, sharing nothing with the operator's own checkout (ADR-0015).
