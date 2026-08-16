@@ -84,6 +84,9 @@ setup_file() {
 # One test, not three: all three assertions share a single `mise install`,
 # which downloads a real Node build. Splitting them would triple that
 # download for no gain (ADR-0008 measures the same three outcomes together).
+#
+# Unreliable specifically when run from inside this repo's own workspace
+# devcontainer, not a regression - see docs/agents/gotchas.md.
 @test "mise resolves a real binary through shims, under sudo, and reports unset outside any project" {
   run docker run --rm --user vscode "$IMAGE" zsh -lc '
     set -e

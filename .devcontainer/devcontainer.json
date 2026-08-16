@@ -13,6 +13,11 @@
   },
   "postCreateCommand": "${containerWorkspaceFolder}/.devcontainer/post-create",
   "postStartCommand": "${containerWorkspaceFolder}/.devcontainer/post-start",
+  // Default (updateContentCommand, undefined here) lets VS Code open the
+  // first integrated terminal before dotfiles-bootstrap finishes cloning
+  // and applying - that terminal sources .zshrc before it exists and
+  // stays bare for its lifetime. postStartCommand waits for the bootstrap
+  // to complete first.
   "waitFor": "postStartCommand",
   "remoteUser": "vscode",
   "customizations": {
