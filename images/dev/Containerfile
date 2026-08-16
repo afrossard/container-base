@@ -4,7 +4,7 @@ ENV LANG=C.UTF-8
 
 # uv owns the Python interpreter (ADR-0006). The shell installer targets
 # $HOME and appends to ~/.zshrc; the documented COPY --from form avoids both.
-COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.12.5 /uv /uvx /bin/
 
 # mise owns Node and every language added later (ADR-0006), installed from
 # its own apt repository rather than the `mise.run` script, which also
