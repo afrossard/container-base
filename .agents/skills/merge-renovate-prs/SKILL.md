@@ -14,6 +14,8 @@ For each one, in order:
    Read the diff and decide whether it's actually breaking for a consumer (a changed default, a removed flag a consumer script relies on), not just "the version number jumped."
    Not breaking: skip to step 3, merge normally.
    Breaking: stop on this PR, don't merge, and present the diff, the reasoning, and the PR link to the operator instead.
-3. **Everything else on green CI** (`chore(deps)`, or a non-major `fix(deps)`/`feat(deps)`): merge with the generated title, unedited, via `gh pr merge <number> --squash --delete-branch` (docs/agents/issue-tracker.md's standard merge convention).
+3. **Everything else on green CI** (`chore(deps)`, or a non-major `fix(deps)`/`feat(deps)`): merge with the generated title, unedited, via `gh pr merge <number> --squash --subject "<PR title>" --delete-branch`.
+
+Renovate PRs always have exactly one commit, and GitHub's squash-merge default for a single-commit PR is that commit's own message, not the PR title - so `--subject` must always be passed explicitly, even in the unedited case, or the linted title never reaches the squash commit and release-please silently sees nothing.
 
 Never edit a Renovate-generated PR title before merging; escalate via the squash commit subject instead (`gh pr merge --subject`).

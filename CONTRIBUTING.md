@@ -6,6 +6,7 @@ Every commit that lands on `main` must follow [Conventional Commits](https://www
 Releases are cut automatically by release-please (ADR-0018), and the commit type is what computes the version bump, so this is load-bearing, not cosmetic.
 
 This repo squash-merges pull requests, so **the PR title becomes the commit message** - write the PR title in the same format.
+That only happens because docs/agents/issue-tracker.md's merge convention passes the PR title explicitly via `--subject`; GitHub's own squash-merge default silently drops it for any single-commit PR.
 
 | Type                                              | Effect on the next release |
 | ------------------------------------------------- | -------------------------- |
