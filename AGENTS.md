@@ -16,6 +16,12 @@ See `CONTRIBUTING.md`; since PRs squash-merge, the PR title is what must conform
 
 ## Agent skills
 
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root.
+Read these before exploring the codebase.
+See `docs/agents/domain.md`.
+
 ### Issue tracker
 
 Issues live as GitHub issues in `afrossard/container-base`, driven by the `gh` CLI.
@@ -26,17 +32,12 @@ See `docs/agents/issue-tracker.md`.
 The five canonical triage roles, each label string equal to its name.
 See `docs/agents/triage-labels.md`.
 
-### Domain docs
+### Operational gotchas
 
-Single-context: `CONTEXT.md` and `docs/adr/` at the repo root.
-See `docs/agents/domain.md`.
+Recurring failure modes specific to working in this repo as an agent.
+See `docs/agents/gotchas.md`.
 
 ### Known consumers pending migration
 
 Repos still hand-rolling the setup this repo now owns.
 See `docs/agents/known-consumers.md`.
-
-### Operational gotchas
-
-Recurring failure modes specific to working in this repo as an agent.
-See `docs/agents/gotchas.md`.
