@@ -45,3 +45,9 @@ Either you're inventing language the project doesn't use (reconsider), or there'
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
 > _Contradicts ADR-0003 (two-axis tag matrix) - but worth reopening because…_
+
+## Record what you resolve
+
+When a session resolves a decision or convention, record it as an ADR through `/domain-modeling` - don't wait to be asked.
+When a session resolves a non-obvious finding worth keeping (what happened, what was verified), record it as a comment on the issue before closing it, per `docs/agents/issue-tracker.md`'s "Resolve" step.
+Neither ever goes into AGENTS.md itself (ADR-0019).

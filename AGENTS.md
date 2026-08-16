@@ -5,7 +5,7 @@ Publishes shared container base images (dev, agent, and per-language runtime-bas
 ## Domain docs
 
 Single-context: `CONTEXT.md` and `docs/adr/` at the repo root.
-Read these before exploring the codebase.
+Read these before exploring the codebase, and record what you resolve there, not in this file.
 See `docs/agents/domain.md`.
 
 ## Issue tracker
