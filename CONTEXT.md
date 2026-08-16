@@ -35,6 +35,11 @@ For example `1.4.2-dev`, `1.4.2-agent`, `1.4.2-base-prod`, `1.4.2-python-prod`.
 **Consumer**:
 A repo whose devcontainer or production Containerfile builds FROM one of these images.
 
+**Shipped dependency**:
+A third-party artifact baked into a published image, so bumping it changes what consumers pull.
+Dependencies that serve only this repo's own build or CI are not shipped dependencies, and their bumps change nothing consumers observe.
+_Avoid_: runtime dependency - nothing here runs at consumer runtime; the distinction is what ships, not what runs.
+
 **Reference profile**:
 This repo's own `.devcontainer/devcontainer.json`, maintained as the dev image's first consumer and the dogfooding test for it.
 It is a recipe for reproducing a dev environment a trusted human works in, not a security boundary; the controls that contain an autonomous agent live in the agent runtime instead (ADR-0013).
