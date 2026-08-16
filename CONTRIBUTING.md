@@ -24,6 +24,8 @@ docs: record ADR-0018
 
 A scope is optional (`fix(agent): ...`) and this repo does not enforce a scope vocabulary.
 
+Renovate's PRs title themselves `fix(deps): ...` when they bump a shipped dependency (`images/dev/**`, `images/agent/**`) and `chore(deps): ...` everywhere else - both deliberate, not a bug (ADR-0020).
+
 ## Releases
 
 There is no manual release step.
