@@ -1,4 +1,16 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"]
+  "extends": ["config:recommended"],
+  "semanticCommits": "enabled",
+  "packageRules": [
+    {
+      "matchFileNames": ["images/**"],
+      "semanticCommitType": "fix"
+    },
+    {
+      "matchFileNames": ["images/**"],
+      "matchUpdateTypes": ["major"],
+      "semanticCommitType": "feat"
+    }
+  ]
 }

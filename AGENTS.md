@@ -30,6 +30,11 @@ See `docs/agents/triage-labels.md`.
 Conventional Commits are mandatory - the commit type computes the release version bump (ADR-0018).
 See `CONTRIBUTING.md`; since PRs squash-merge, the PR title is what must conform.
 
+## Renovate PRs
+
+Only a shipped-dependency bump (`images/**`) computes a release; everything else Renovate touches stays `chore(deps)`.
+See `CONTRIBUTING.md`'s "Renovate PRs and releases" section for the merge procedure and agent autonomy boundary; `/merge-renovate-prs` runs it.
+
 ## Operational gotchas
 
 Recurring failure modes specific to working in this repo as an agent.
