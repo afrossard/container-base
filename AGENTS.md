@@ -127,6 +127,12 @@ The first attempt's verification missed this by building `FROM` the already-publ
 Everything else was reproduced rather than reasoned about: a plain `sudo apt-get upgrade -y` inside a stock guest triggers the failure byte-identically, restarting the daemon stack afterward fixes it (ruling out "2.3.3 is broken under msb"), and with the hold in place an upgrade still touches ten other packages and exits 0 while `docker run` keeps working.
 `test/agent/agent.bats` carries both a fast assertion on the holds and the slower regression proper, which runs a real upgrade and then a real container; both were confirmed to fail against the unfixed published image and pass against the built one, rather than only ever observed green.
 
+Issue #93 adds a PR title lint: `.github/workflows/pr-title-lint.yml` runs `amannn/action-semantic-pull-request@v6` on `pull_request` `opened`, `edited`, `synchronize`, and `reopened`, failing the check when a PR title does not parse as a Conventional Commit.
+This makes ADR-0018's Conventional Commits mandate mechanical for the human PR path rather than aspirational: a squash-merged PR with a non-conventional title used to be silently skipped by release-please, contributing no version bump and no CHANGELOG entry, as happened live with four pre-ADR-0018 commits ahead of release PR #90.
+No type allowlist beyond the action's own default is configured, since the contract is "release-please can parse this," not a style preference; issue #92 covers the adjacent Renovate path by having Renovate emit conventional titles itself, which this check only confirms.
+The workflow declares `permissions: pull-requests: read`, the action's own documented minimum - the `pull-requests: write` grant it separately documents is only for the opt-in `[WIP]`-prefix feature, which this repo does not use.
+It carries no path filter, deliberately, the same reasoning `launcher.yml` and `format.yml` already record: a check scoped to a path filter can never be marked required without reporting pending forever on PRs that don't touch that path, and a PR title applies to every PR regardless of what it touches.
+
 ## Known consumers pending migration
 
 These repos currently build FROM upstream images directly and hand-roll the setup this repo now owns. Once the dev image is published, migrate each devcontainer to `FROM ghcr.io/afrossard/container-base:<version>-dev`:
