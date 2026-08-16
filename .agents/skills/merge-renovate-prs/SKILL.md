@@ -1,6 +1,6 @@
 ---
 name: merge-renovate-prs
-description: Review and merge this repo's open Renovate dependency-bump PRs, applying the shipped-dependency release policy and agent autonomy boundary from CONTRIBUTING.md. Use when asked to merge, review, or triage Renovate PRs, or clear the Renovate/dependency-bump backlog.
+description: Review and merge this repo's open Renovate dependency-bump PRs, applying the shipped-dependency release policy and agent autonomy boundary from CONTRIBUTING.md. Use when asked to merge Renovate's open PRs.
 ---
 
 Read CONTRIBUTING.md's "Renovate PRs and releases" section first - it holds the policy this skill only executes.
