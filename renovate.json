@@ -4,8 +4,13 @@
   "semanticCommits": "enabled",
   "packageRules": [
     {
-      "matchFileNames": ["images/dev/**", "images/agent/**"],
+      "matchFileNames": ["images/**"],
       "semanticCommitType": "fix"
+    },
+    {
+      "matchFileNames": ["images/**"],
+      "matchUpdateTypes": ["major"],
+      "semanticCommitType": "feat"
     }
   ]
 }
