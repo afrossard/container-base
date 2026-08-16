@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/afrossard/container-base/compare/0.1.0...0.2.0) (2026-08-16)
+
+
+### Features
+
+* lint PR titles against Conventional Commits ([#96](https://github.com/afrossard/container-base/issues/96)) ([5690935](https://github.com/afrossard/container-base/commit/5690935aafdc7e29a35acf9924037c107be6ca59))
+
+
+### Bug Fixes
+
+* **deps:** update ghcr.io/astral-sh/uv docker tag to v0.12.5 ([de87066](https://github.com/afrossard/container-base/commit/de8706601b1dff08068bbe0e66b147c5525aa48b))
+* shipped-dependency Renovate bumps release, everything else stays chore ([#98](https://github.com/afrossard/container-base/issues/98)) ([b95f2ae](https://github.com/afrossard/container-base/commit/b95f2ae1857352ba444c22c7b163a550ebe1ded3))
+
 ## [0.1.0](https://github.com/afrossard/container-base/compare/0.0.9...0.1.0) (2026-08-15)
 
 
