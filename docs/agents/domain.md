@@ -51,3 +51,9 @@ If your output contradicts an existing ADR, surface it explicitly rather than si
 When a session resolves a decision or convention, record it as an ADR through `/domain-modeling` - don't wait to be asked.
 When a session resolves a non-obvious finding worth keeping (what happened, what was verified), record it as a comment on the issue before closing it, per `docs/agents/issue-tracker.md`'s "Resolve" step.
 Neither ever goes into AGENTS.md itself (ADR-0019).
+
+## Writing AGENTS.md or a docs/agents/ sibling
+
+Load `/writing-for-agents` before creating or substantially editing `AGENTS.md` itself, or any of its `docs/agents/*.md` siblings (`issue-tracker.md`, `triage-labels.md`, `domain.md`, and any later addition).
+These are exactly what that skill means by "an AGENTS.md or a doc reached by a pointer," even though its own trigger phrase doesn't yet name the siblings explicitly.
+This doesn't apply to ADRs or `CONTEXT.md` - those follow `/domain-modeling`'s own `ADR-FORMAT.md`/`CONTEXT-FORMAT.md` instead, which are deliberately terser.
