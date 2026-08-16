@@ -69,7 +69,7 @@ source "$script_dir/lib/agent-runtime.sh"
 
 : "${DOCKER_DATA_SIZE:=20G}"
 
-version="0.2.0" # x-release-please-version
+version="0.3.0" # x-release-please-version
 image="ghcr.io/afrossard/container-base:${version}-agent"
 name=""
 force=0
