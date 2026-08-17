@@ -27,6 +27,38 @@ usage() {
   sed -n '/^# Usage:/,/^$/p' "$0" | cut -c3-
 }
 
+# Stops with one message if a host prerequisite is missing (see the README).
+require_tools() {
+  local tool missing=""
+  for tool in "$@"; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      missing="$missing $tool"
+    fi
+  done
+  if [ -n "$missing" ]; then
+    echo "$(basename "$0"): missing host prerequisite(s):$missing" >&2
+    echo "$(basename "$0"): see the README's \"Host prerequisites\" section" >&2
+    exit 1
+  fi
+}
+
+# `msb list` has no status filter past --running and --stopped, so these ask
+# whether a name is in one of its lists rather than parsing a status string.
+contains_line() {
+  case $'\n'"$1"$'\n' in
+    *$'\n'"$2"$'\n'*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+sandbox_exists() {
+  contains_line "$(msb list -q 2>/dev/null || true)" "$1"
+}
+
+sandbox_is_running() {
+  contains_line "$(msb list --running -q 2>/dev/null || true)" "$1"
+}
+
 # Creates a named msb volume if it doesn't already exist. Extra args pass
 # straight through to `msb volume create` (--kind, --size, ...).
 ensure_volume() {

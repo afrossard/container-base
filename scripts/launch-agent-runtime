@@ -85,26 +85,44 @@ max_memory="16G"
 
 # "name<TAB>status" lines for sandboxes matching this repo's label, plus
 # any exact-name match (covers sandboxes created before labels existed).
+# A name in neither status list is reported as "unknown" rather than
+# dropped, so a sandbox in some third state is still offered for reuse.
 matching_sandboxes() {
-  {
-    msb list --label "repo=$1" --format json 2>/dev/null | jq -r '.[] | "\(.name)\t\(.status)"'
-    msb list --format json 2>/dev/null | jq -r --arg name "$1" '.[] | select(.name == $name) | "\(.name)\t\(.status)"'
-  } | sort -u
-}
+  local base="$1" names running stopped name status
+  running=$(msb list --running -q 2>/dev/null || true)
+  stopped=$(msb list --stopped -q 2>/dev/null || true)
 
-# Empty if no sandbox is named exactly $1 (covers an explicit --name too,
-# which bypasses resolve_name's own matching entirely).
-sandbox_status() {
-  msb list --format json 2>/dev/null | jq -r --arg name "$1" '.[] | select(.name == $name) | .status'
+  names=$(
+    {
+      msb list --label "repo=$base" -q 2>/dev/null || true
+      if sandbox_exists "$base"; then printf '%s\n' "$base"; fi
+    } | sort -u
+  )
+  if [ -z "$names" ]; then
+    return 0
+  fi
+
+  while IFS= read -r name; do
+    if [ -z "$name" ]; then
+      continue
+    fi
+    if contains_line "$running" "$name"; then
+      status=running
+    elif contains_line "$stopped" "$name"; then
+      status=stopped
+    else
+      status=unknown
+    fi
+    printf '%s\t%s\n' "$name" "$status"
+  done <<<"$names"
 }
 
 # Confirms before replacing a running sandbox (honours --force). Sets
 # $name directly rather than via command substitution, so `exit` here
 # still ends the whole script, not just a subshell.
 confirm_replace_if_running() {
-  local target="$1" offer_new="$2" status choice
-  status=$(sandbox_status "$target")
-  [ "$status" = "Running" ] || return 0
+  local target="$1" offer_new="$2" choice
+  sandbox_is_running "$target" || return 0
   [ "$force" = "1" ] && return 0
 
   if [ ! -t 0 ]; then
@@ -266,6 +284,9 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+# After the parse loop, so --help still works on a machine with neither.
+require_tools msb git
 
 if [ -z "$clone_url" ]; then
   if ! clone_url=$(repo_url); then
