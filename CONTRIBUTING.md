@@ -30,6 +30,18 @@ A scope is optional (`fix(agent): ...`) and this repo does not enforce a scope v
 There is no manual release step.
 Merging a release-please PR publishes both image variants at the new version; see ADR-0018 for the full flow.
 
+### Never snooze a closed release-please PR
+
+release-please reuses one fixed branch (`release-please--branches--main`) for its release PR across every cycle.
+`autorelease: snooze` is release-please's own (undocumented) convention for telling it "don't recreate this closed PR" - but attaching it triggers a confirmed, unfixed upstream bug: [googleapis/release-please#2566](https://github.com/googleapis/release-please/issues/2566).
+On its next run, release-please tries to update the snoozed PR in place, that update path can only reuse an *open* PR, so it silently opens a new one instead - then still tries to reopen the original closed PR, which GitHub rejects because the branch already has the fresh PR open.
+The whole action call crashes at that point, before it labels the new PR `autorelease: pending`, which means the *following* run finds nothing to tag and silently skips the release entirely.
+
+If a release-please PR needs abandoning:
+
+- Prefer leaving it **open**. release-please updates an open PR in place on every run without ever touching the buggy snoozed-PR path.
+- If it must be closed, close it and leave it **unlabeled**. Do not add `autorelease: snooze`, however tempting the label's own description sounds.
+
 ## Renovate PRs and releases
 
 Renovate opens PRs for third-party dependency bumps; `renovate.json` sets `semanticCommits: "enabled"` and titles them accordingly, but only some of them should release.
