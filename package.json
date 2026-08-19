@@ -21,6 +21,7 @@
     "publish:agent": "devcontainer build --workspace-folder . --config images/agent/devcontainer.json --frozen-lockfile --platform linux/amd64,linux/arm64 --push --image-name $IMAGE",
     "verify:publish-agent": "bats test/publish-agent",
     "test:launcher": "bats test/launcher",
+    "test:cleanup": "bats test/cleanup",
     "test:scripts": "bats test/scripts"
   },
   "devDependencies": {

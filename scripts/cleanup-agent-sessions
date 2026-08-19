@@ -48,13 +48,15 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+# After the parse loop, so --help still works on a machine with neither.
+require_tools msb git
+
 if [ -n "$target_name" ]; then
-  status=$(msb list --format json 2>/dev/null | jq -r --arg name "$target_name" '.[] | select(.name == $name) | .status')
-  if [ -z "$status" ]; then
+  if ! sandbox_exists "$target_name"; then
     echo "cleanup-agent-sessions: no sandbox named '$target_name'" >&2
     exit 1
   fi
-  if [ "$status" = "Running" ] && [ "$force" != "1" ]; then
+  if sandbox_is_running "$target_name" && [ "$force" != "1" ]; then
     echo "cleanup-agent-sessions: '$target_name' is currently running; pass --force to remove it anyway" >&2
     exit 1
   fi
