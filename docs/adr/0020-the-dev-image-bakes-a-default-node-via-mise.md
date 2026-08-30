@@ -6,7 +6,10 @@ Without a default, every fresh guest and every unpinned devcontainer pays a full
 
 The dev image therefore runs `mise install node@lts` at build time and ships a system-level default pin in `/etc/mise/config.toml`, so bare `node` resolves everywhere while any project pin still layers over it and wins.
 The agent image inherits this by building FROM the dev image; runtime bases are untouched.
-mise remains the runtime's owner - this amends ADR-0006's "no global config" clause rather than abandoning the manager model, and the system-under-project layering was verified against mise itself (via `MISE_SYSTEM_CONFIG_FILE`) before deciding, not assumed.
+mise remains the runtime's owner, so this amends the manager model rather than abandoning it.
+The clause it amends is ADR-0008's: that ADR deliberately left `MISE_GLOBAL_CONFIG_FILE` unset so there would be no fallback version, citing ADR-0006's no-baked-runtime rule as the reason.
+A system-level default pin is exactly that fallback, accepted here on purpose.
+`MISE_GLOBAL_CONFIG_FILE` stays unset; the pin ships as mise's system config instead, and project pins still layer over it and win, which was verified against mise itself (via `MISE_SYSTEM_CONFIG_FILE`) before deciding, not assumed.
 
 ## Considered options
 

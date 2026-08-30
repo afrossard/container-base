@@ -1,5 +1,9 @@
 # Language managers, not baked runtimes
 
+> **Amended by [ADR-0020](./0020-the-dev-image-bakes-a-default-node-via-mise.md).**
+> The dev image now bakes exactly one runtime: a manager-owned default Node, installed by mise and pinned at the system level.
+> The rule below stands - the manager owns every runtime, and a project's version comes from the project - but "carries no language runtime at all" is no longer literally true.
+
 The dev image carries every language (ADR-0004), which would mean baking a version of each and making every consumer live with it.
 Instead it carries no language runtime at all.
 It carries `uv`, which owns the Python interpreter, and `mise`, which owns Node and every language added later.
