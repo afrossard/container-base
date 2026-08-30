@@ -40,13 +40,26 @@ setup() {
   # resolves it, and msb is stubbed.
   export GH_TOKEN="not-a-real-token"
 
+  # The launcher must not call jq (issue #83). Exiting 127 is not enough on
+  # its own: sandbox_is_running is called as `... || return 0`, which
+  # suppresses set -e inside it, so a jq failure there would be swallowed
+  # and the suite would stay green. The stub therefore records the call,
+  # and the test below asserts on the recording rather than on a failure.
+  export JQ_CALLED_FILE="$BATS_TEST_TMPDIR/jq-called"
+  cat > "$stub_dir/jq" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$JQ_CALLED_FILE"
+exit 127
+STUB
+  chmod +x "$stub_dir/jq"
+
   # Answers just enough for the launcher to reach its final `exec msb run`:
   # no sandbox exists, every volume already exists (so nothing is created),
   # and `run` records its arguments instead of booting anything.
   cat > "$stub_dir/msb" <<'STUB'
 #!/usr/bin/env bash
 case "$1" in
-  list) echo '[]' ;;
+  list) ;;
   volume)
     # `volume inspect` succeeding means ensure_volume never calls create.
     exit 0
@@ -256,6 +269,17 @@ has_flag_value() {
   run launch --github-token - <<< "piped-token-value"
   [ "$status" -eq 0 ]
   ! has_arg "-@github.com,api.github.com"
+}
+
+# jq was an undeclared host prerequisite: CI ships it, so nothing noticed
+# (issue #83). The sandbox lookup is the path that used it, so a launch
+# that resolves its own name exercises it - unlike launch(), which passes
+# --name and skips resolution.
+@test "a launch never calls jq" {
+  run "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" \
+    --clone-url https://example.invalid/repo.git -- true
+  [ "$status" -eq 0 ]
+  [ ! -f "$JQ_CALLED_FILE" ]
 }
 
 @test "--github-token is documented in --help" {

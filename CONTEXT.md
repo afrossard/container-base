@@ -40,6 +40,12 @@ A third-party artifact baked into a published image, so bumping it changes what 
 Dependencies that serve only this repo's own build or CI are not shipped dependencies, and their bumps change nothing consumers observe.
 _Avoid_: runtime dependency - nothing here runs at consumer runtime; the distinction is what ships, not what runs.
 
+**Host prerequisite**:
+A tool the operator installs on their own machine, so that this repo's host-side scripts run: `msb` and `git`, and nothing else.
+It is not a shipped dependency, because no image carries it and no `npm ci` supplies it.
+The bar is high, and higher than the bar for a tool in the dev image: a dev image tool is useful and disposable, while a host prerequisite is a manual install on a machine this repo does not own and cannot clean up.
+_Avoid_: host dependency - "dependency" reads as something a tool resolves for you, and this is the opposite.
+
 **Reference profile**:
 This repo's own `.devcontainer/devcontainer.json`, maintained as the dev image's first consumer and the dogfooding test for it.
 It is a recipe for reproducing a dev environment a trusted human works in, not a security boundary; the controls that contain an autonomous agent live in the agent runtime instead (ADR-0013).

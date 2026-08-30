@@ -18,11 +18,16 @@ See `docs/agents/issue-tracker.md`.
 The five canonical triage roles, each label string equal to its name.
 See `docs/agents/triage-labels.md`.
 
+## Host prerequisites
+
+The host-side scripts need `msb` and `git` on the operator's own machine, and nothing else.
+See the README's "Host prerequisites" section.
+
 ## Commands
 
 - `npm run build:dev` / `npm run test:dev` - build and test the dev image.
 - `npm run build:agent` / `npm run test:agent` - build and test the agent image.
-- `npm run test:launcher` / `npm run test:scripts` - test the host-side launcher and shared scripts.
+- `npm run test:launcher` / `npm run test:cleanup` / `npm run test:scripts` - test the host-side launcher, the cleanup script, and the CI helper scripts.
 - `npm run format:check` - required before every commit.
 
 ## Commit messages

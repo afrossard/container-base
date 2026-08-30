@@ -16,4 +16,13 @@ Pin a version and let Renovate bump it.
 
 `scripts/launch-agent-runtime` launches the agent image as a microsandbox guest - host-side tooling, and a deliberate, narrow exception to this repo's image-only scope (ADR-0014). `scripts/cleanup-agent-sessions` removes stopped sessions for the current repo and their disk volumes.
 
+## Host prerequisites
+
+Those two scripts run on your own machine, so two tools have to be there already:
+
+- **[microsandbox](https://docs.microsandbox.dev/) (`msb`)** - the hypervisor the agent runtime runs on.
+- **git** - the session's clone URL and the repo name both come from your `origin` remote.
+
+Nothing else. Both scripts check for these and stop with one message if either is missing, so `--help` still works on a machine with neither. Everything else the images need ships inside them, and `npm ci` supplies the test tooling.
+
 See [`CONTEXT.md`](./CONTEXT.md) for the glossary and [`docs/adr/`](./docs/adr/) for why it's shaped this way.
