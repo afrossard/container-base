@@ -1,4 +1,4 @@
-name: launcher
+name: host scripts
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  launcher:
+  host-scripts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -22,7 +22,4 @@ jobs:
 
       - run: npm run test:launcher
 
-      # Both suites cover the host-side scripts. Renaming this workflow to
-      # match is left for a separate commit, so this one doesn't move a
-      # required check.
       - run: npm run test:cleanup
