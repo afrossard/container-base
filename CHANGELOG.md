@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/afrossard/container-base/compare/0.3.0...0.3.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* **deps:** update ghcr.io/astral-sh/uv docker tag to v0.12.7 ([#112](https://github.com/afrossard/container-base/issues/112)) ([b41c1ef](https://github.com/afrossard/container-base/commit/b41c1ef240ab0495580fa50dd68afa715f744484))
+* launcher and cleanup no longer need jq on the host ([#111](https://github.com/afrossard/container-base/issues/111)) ([4c2fae1](https://github.com/afrossard/container-base/commit/4c2fae1aee5f949156e9328ac4683eacb7728cf5))
+
 ## [0.3.0](https://github.com/afrossard/container-base/compare/0.2.0...0.3.0) (2026-08-16)
 
 
