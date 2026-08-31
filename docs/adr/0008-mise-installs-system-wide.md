@@ -34,6 +34,11 @@ Outside any project the shim reports `No version is set for shim: node`.
 That error is the correct behaviour, not a gap.
 ADR-0006 says the image bakes no runtime, so there is deliberately no fallback version, and a global config file is precisely a baked fallback.
 
+**ADR-0020 amends this section.**
+The dev image now ships a system-level default pin at `/etc/mise/config.toml`, which is the baked fallback this section argued against, so outside any project a bare `node` resolves rather than reporting the shim error above.
+`MISE_GLOBAL_CONFIG_FILE` is still not set - the pin ships as mise's _system_ config, not its global one.
+The rest of this ADR stands unamended: the system-wide data directory, the chown, and `secure_path` are untouched, and version pinning stays per project, because a project pin still wins over the baked default.
+
 ## Considered options
 
 The per-user default was the first recommendation and was rejected on the `sudo` argument above.
