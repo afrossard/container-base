@@ -9,6 +9,7 @@ on:
       - package.json
       - package-lock.json
       - .github/workflows/agent-image.yml
+      - .github/actions/setup/**
   workflow_dispatch:
 
 jobs:
