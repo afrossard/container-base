@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/afrossard/container-base/compare/0.3.1...0.4.0) (2026-08-31)
+
+
+### Features
+
+* bake a default Node into the dev image via mise ([#120](https://github.com/afrossard/container-base/issues/120)) ([46c2d43](https://github.com/afrossard/container-base/commit/46c2d43b42557605dd189fd6ce25620b7e00fc79))
+
 ## [0.3.1](https://github.com/afrossard/container-base/compare/0.3.0...0.3.1) (2026-08-30)
 
 
