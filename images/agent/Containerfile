@@ -3,7 +3,7 @@
 # this pin (ADR-0018), bumping it in step with every release rather than
 # one tag late.
 # x-release-please-start-version
-ARG BASE_VERSION=0.3.1
+ARG BASE_VERSION=0.4.0
 # x-release-please-end
 FROM ghcr.io/afrossard/container-base:${BASE_VERSION}-dev
 
