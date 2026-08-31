@@ -76,18 +76,43 @@ setup_file() {
   [[ "$output" == *'secure_path="/usr/local/share/mise/shims:'* ]]
 }
 
+# MISE_GLOBAL_CONFIG_FILE stays unset even with ADR-0020's baked default:
+# that pin ships as mise's *system* config (/etc/mise/config.toml), a
+# distinct and lower layer, not the global one.
 @test "MISE_GLOBAL_CONFIG_FILE is not set" {
   run docker run --rm "$IMAGE" sh -c 'printenv MISE_GLOBAL_CONFIG_FILE'
   [ "$status" -ne 0 ]
 }
 
-# One test, not three: all three assertions share a single `mise install`,
+# ADR-0020: the dev image bakes a default Node so tooling that runs before
+# any project pin exists (npm-global helpers, hooks, installers invoked from
+# unpinned directories) has a runtime, and no fresh guest re-downloads it.
+# The pin ships as mise's system config, the layer a project pin overrides.
+# It is a concrete Node major, not the `lts` alias, so Renovate's mise
+# manager can bump it on the Node LTS schedule (issue #102).
+@test "the dev image carries a mise system config pinning a concrete Node major" {
+  run docker run --rm "$IMAGE" cat /etc/mise/config.toml
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ node[[:space:]]*=[[:space:]]*\"[0-9]+\" ]]
+}
+
+@test "a bare node resolves outside any project, to the baked default" {
+  run docker run --rm --user vscode "$IMAGE" zsh -lc 'cd /tmp && node --version'
+  [ "$status" -eq 0 ]
+  [[ "$output" == v* ]]
+}
+
+# One test, not three: the three assertions share a single `mise install`,
 # which downloads a real Node build. Splitting them would triple that
 # download for no gain (ADR-0008 measures the same three outcomes together).
+# The project pins a major distinct from the baked default, so IN_PROJECT
+# genuinely proves the project config layers over /etc/mise/config.toml and
+# wins; OUTSIDE_PROJECT proves the baked system pin resolves rather than the
+# pre-ADR-0020 "No version is set for shim: node".
 #
 # Unreliable specifically when run from inside this repo's own workspace
 # devcontainer, not a regression - see docs/agents/gotchas.md.
-@test "mise resolves a real binary through shims, under sudo, and reports unset outside any project" {
+@test "a project pin overrides the baked default, through shims and under sudo" {
   run docker run --rm --user vscode "$IMAGE" zsh -lc '
     set -e
     mkdir -p /tmp/proj && cd /tmp/proj
@@ -97,16 +122,32 @@ setup_file() {
     echo "IN_PROJECT=$(node --version)"
     echo "UNDER_SUDO=$(sudo node --version)"
     cd /tmp
-    if node --version 2>&1 | grep -q "No version is set for shim: node"; then
-      echo "OUTSIDE_PROJECT=no-version-set"
-    else
-      echo "OUTSIDE_PROJECT=unexpected"
-    fi
+    echo "OUTSIDE_PROJECT=$(node --version)"
   '
   [ "$status" -eq 0 ]
   [[ "$output" == *"IN_PROJECT=v22"* ]]
   [[ "$output" == *"UNDER_SUDO=v22"* ]]
-  [[ "$output" == *"OUTSIDE_PROJECT=no-version-set"* ]]
+  [[ "$output" == *"OUTSIDE_PROJECT=v"* ]]
+  [[ "$output" != *"OUTSIDE_PROJECT=v22"* ]]
+}
+
+# ADR-0008's chown makes the shared data directory vscode-owned, so a global
+# npm install under the baked Node writes there with no sudo. (npm's own
+# ~/.npm cache still lands in $HOME at runtime, harmless, same as mise's own
+# ~/.cache/mise - ADR-0008.)
+@test "a global npm install under the baked Node needs no sudo and lands in the shared data dir" {
+  run docker run --rm --user vscode "$IMAGE" zsh -lc '
+    set -e
+    cd /tmp
+    root=$(npm root -g)
+    case "$root" in
+      /usr/local/share/mise/*) ;;
+      *) echo "npm root -g outside the shared data dir: $root"; exit 1 ;;
+    esac
+    npm install -g cowsay >/dev/null 2>&1
+    test -x "$(npm prefix -g)/bin/cowsay"
+  '
+  [ "$status" -eq 0 ]
 }
 
 @test "uv can resolve and fetch a Python interpreter" {

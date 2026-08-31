@@ -16,9 +16,21 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.7 /uv /uvx /bin/
 # leaves this layer's edits alone.
 ENV MISE_DATA_DIR=/usr/local/share/mise
 
+# The system-level default Node pin (ADR-0020). Its full rationale lives in
+# the file itself; in short, mise reads /etc/mise/config.toml as the lowest
+# layer of its config precedence, so a bare `node` resolves outside any
+# project while a project's own .mise.toml still layers over it and wins.
+# Copied in before the `mise install` below, which is what reads it.
+COPY mise/config.toml /etc/mise/config.toml
+
 # ca-certificates, curl and git are runtime requirements of the Homebrew
 # installer below, not of mise; they're installed in this same layer to
 # share one apt-get update/install with the rest of the base tooling.
+#
+# `mise install` with no arguments resolves the pin from the system config
+# copied in above and bakes it (ADR-0020): the runtime lands in the shared,
+# vscode-owned data directory, so no fresh guest or unpinned devcontainer
+# re-downloads it. The chown runs after, since the build runs as root.
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -32,14 +44,15 @@ RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mise \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p "$MISE_DATA_DIR" \
+    && mise install \
     && chown -R 1000:1000 "$MISE_DATA_DIR"
 
 # mise runs system-wide, in shims mode (ADR-0008): the data directory above
 # is shared and vscode-owned, the shims directory is on PATH for every
 # shell, and it is prepended to sudo's secure_path, the only one of the
-# three sudo actually reads. MISE_GLOBAL_CONFIG_FILE is deliberately unset:
-# version pinning is per project, and a global config is the baked fallback
-# ADR-0006 rules out.
+# three sudo actually reads. MISE_GLOBAL_CONFIG_FILE stays unset: the baked
+# default Node ships as mise's system config (/etc/mise/config.toml,
+# ADR-0020), not its global one, and per-project pins still win over it.
 RUN sed -i \
         "s|^Defaults\tsecure_path=\"|Defaults\tsecure_path=\"${MISE_DATA_DIR}/shims:|" \
         /etc/sudoers \
