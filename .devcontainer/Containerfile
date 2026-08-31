@@ -2,4 +2,4 @@
 # for hacking on container-base builds FROM the same published artifact
 # every other consumer will, pinned so Renovate owns the bump rather than
 # floating on whatever `dev` last built.
-FROM ghcr.io/afrossard/container-base:0.3.1-dev
+FROM ghcr.io/afrossard/container-base:0.4.0-dev
