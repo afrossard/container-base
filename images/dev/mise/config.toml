@@ -1,0 +1,15 @@
+# Shipped verbatim to /etc/mise/config.toml in the dev image (ADR-0020).
+#
+# This is mise's *system* config, the lowest layer of its precedence chain:
+# it gives a bare `node` a version to resolve outside any project, while a
+# project's own .mise.toml still layers over it and wins. MISE_GLOBAL_CONFIG_FILE
+# stays unset (ADR-0008) - this pin ships as the system config, not the global one.
+#
+# Pinned to a concrete current Active LTS major rather than the `lts` alias
+# (issue #102): Renovate's mise manager scans this path, and its Node
+# versioning is LTS-aware, so it opens a bump PR only when the next line
+# reaches Active LTS - never for an odd or not-yet-LTS major. The bare `lts`
+# alias is not a valid version to Renovate and would never be bumped, so the
+# baked default would silently stale between rebuilds.
+[tools]
+node = "24"
