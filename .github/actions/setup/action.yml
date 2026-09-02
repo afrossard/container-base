@@ -1,0 +1,14 @@
+name: setup
+description: Node toolchain plus npm dependencies, shared by the CI jobs.
+
+# Callers run actions/checkout first: a local action is read from the checked-out tree, so it cannot contain the checkout step itself.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: lts/*
+        cache: npm
+
+    - run: npm ci
+      shell: bash
