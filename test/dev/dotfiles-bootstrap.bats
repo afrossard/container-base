@@ -1,21 +1,16 @@
 #!/usr/bin/env bats
 #
-# Runs against the real image built from images/dev/, not against the
-# dotfiles-bootstrap script source. See issue #6's acceptance criteria:
-# bootstrap from a fixture dotfiles repository, never a personal one -
-# asserting against one developer's repo would bake their configuration
-# into the definition of a working image.
+# Runs against the real image built from images/dev/, bootstrapping from a
+# fixture dotfiles repo, never a personal one (issue #6).
 #
-# Expects IMAGE to name an already-built image (set by `npm run test:dev`,
-# which passes the same tag `npm run build:dev` built).
+# Expects IMAGE to name an already-built image (set by `npm run test:dev`).
 #
-# Cold, warm and drift tests share one $HOME, held in a Docker named volume
-# across separate `docker run` invocations, so each test builds on the
-# previous one's state - the same progression ADR-0009's measurement table
-# walks through.
+# Cold, warm and drift tests share one $HOME in a Docker named volume across
+# separate `docker run` invocations, so each builds on the previous one's
+# state (ADR-0009).
 #
-# Unreliable specifically when run from inside this repo's own workspace
-# devcontainer, not a regression - see docs/agents/gotchas.md.
+# Unreliable when run inside this repo's own devcontainer - see
+# docs/agents/gotchas.md.
 
 setup_file() {
   : "${IMAGE:?set IMAGE to the image tag built by \`npm run build:dev\`}"
@@ -28,14 +23,10 @@ setup_file() {
   git -C "$FIXTURE_UPSTREAM" -c user.email=test@example.com -c user.name=test \
     commit -q -m "fixture v1"
 
-  # A real dotfiles clone never hits this: git only checks ownership on a
-  # local filesystem source, not a network remote. The fixture stands in
-  # for "upstream" as a bind-mounted local path, so on native Linux Docker
-  # (not macOS Docker Desktop, which translates bind-mount ownership away)
-  # its host-side owner doesn't match the container's vscode (uid 1000),
-  # and git refuses it as a "dubious ownership" source. Trusting it via a
-  # dedicated GIT_CONFIG_GLOBAL file - rather than chowning the fixture -
-  # keeps the mount read-only and never touches host-owned files.
+  # The bind-mounted fixture's host-side owner doesn't match the container's
+  # vscode (uid 1000) on native Linux Docker, so git refuses it as "dubious
+  # ownership". A dedicated GIT_CONFIG_GLOBAL trusts it without chowning a
+  # host-owned file or dropping the read-only mount.
   export GIT_CONFIG_FIXTURE="$BATS_FILE_TMPDIR/gitconfig"
   printf '[safe]\n\tdirectory = *\n' > "$GIT_CONFIG_FIXTURE"
 

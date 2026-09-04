@@ -15,19 +15,7 @@ The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codeb
 
 ## File structure
 
-```
-/
-├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-repo-holds-shared-container-images-only.md
-│   ├── 0002-shell-dotfiles-layer-is-dev-only.md
-│   ├── 0003-two-axis-tag-matrix.md            ← partly superseded by 0004
-│   ├── 0004-one-dev-image-and-an-asymmetric-tag-scheme.md
-│   ├── 0005-debian-slim-plus-the-common-utils-feature.md
-│   ├── 0006-language-managers-not-baked-runtimes.md
-│   └── 0007-the-dev-image-declares-no-entrypoint.md
-└── ...
-```
+`CONTEXT.md` and `docs/adr/` at the root. The ADR filenames are full sentences, so `ls docs/adr/` is the index.
 
 If this repo ever grows into several bounded contexts, the layout becomes a root `CONTEXT-MAP.md` pointing at one `CONTEXT.md` per context, with context-scoped ADRs under `src/<context>/docs/adr/`.
 Re-run `/setup-matt-pocock-skills` to switch, or just edit this file.
@@ -54,6 +42,5 @@ Neither ever goes into AGENTS.md itself (ADR-0019).
 
 ## Writing AGENTS.md or a docs/agents/ sibling
 
-Load `/writing-for-agents` before creating or substantially editing `AGENTS.md` itself, or any of its `docs/agents/*.md` siblings (`issue-tracker.md`, `triage-labels.md`, `domain.md`, and any later addition).
-These are exactly what that skill means by "an AGENTS.md or a doc reached by a pointer," even though its own trigger phrase doesn't yet name the siblings explicitly.
-This doesn't apply to ADRs or `CONTEXT.md` - those follow `/domain-modeling`'s own `ADR-FORMAT.md`/`CONTEXT-FORMAT.md` instead, which are deliberately terser.
+Load `/writing-for-agents` before creating or substantially editing `AGENTS.md` or any `docs/agents/*.md` sibling.
+This doesn't apply to ADRs or `CONTEXT.md`, which follow `/domain-modeling`'s own deliberately terser `ADR-FORMAT.md`/`CONTEXT-FORMAT.md`.

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Shared by scripts/launch-agent-runtime and scripts/cleanup-agent-sessions.
-# Sourced, not executed - both scripts are the narrow ADR-0001/ADR-0014
-# exception; this file lives alongside them rather than widening it.
+# Sourced by scripts/launch-agent-runtime and scripts/cleanup-agent-sessions:
+# the narrow ADR-0001/ADR-0014 host-tooling exception.
 
 # Repo name: git remote's basename, else the toplevel dir, else $PWD.
 repo_name() {
@@ -21,8 +20,7 @@ repo_url() {
   git remote get-url origin
 }
 
-# Extracts the "# Usage:" comment block from whichever script sources this
-# file - $0 is the top-level script actually being run, not this file.
+# Prints the sourcing script's "# Usage:" block ($0 is that script, not this).
 usage() {
   sed -n '/^# Usage:/,/^$/p' "$0" | cut -c3-
 }
@@ -42,8 +40,8 @@ require_tools() {
   fi
 }
 
-# `msb list` has no status filter past --running and --stopped, so these ask
-# whether a name is in one of its lists rather than parsing a status string.
+# `msb list` filters only by --running/--stopped, so test list membership
+# rather than parse a status string.
 contains_line() {
   case $'\n'"$1"$'\n' in
     *$'\n'"$2"$'\n'*) return 0 ;;

@@ -1,11 +1,9 @@
 #!/usr/bin/env bats
 #
-# Runs against the real image built from images/dev/, not against the
-# Containerfile or devcontainer.json source. See issue #1's "Test assertions"
-# section: assert through the door a user walks through.
+# Runs against the real image built from images/dev/ (issue #1: assert
+# through the door a user walks through).
 #
-# Expects IMAGE to name an already-built image (set by `npm run test:dev`,
-# which passes the same tag `npm run build:dev` built).
+# Expects IMAGE to name an already-built image (set by `npm run test:dev`).
 
 setup_file() {
   : "${IMAGE:?set IMAGE to the image tag built by \`npm run build:dev\`}"
@@ -38,11 +36,9 @@ setup_file() {
   [ -n "$output" ]
 }
 
-# Issue #1's literal spec text: "$HOME contains no chezmoi-managed file
-# after build". Chezmoi never runs at build time (issue #6), so its source
-# directory must be absent; installOhMyZsh/installOhMyZshConfig in
-# devcontainer.json additionally prevent oh-my-zsh's installer writing
-# ~/.zshrc and ~/.oh-my-zsh if either flips on.
+# Chezmoi never runs at build time (issue #6), so its source directory
+# must be absent; installOhMyZsh/installOhMyZshConfig keep oh-my-zsh's
+# installer from writing ~/.zshrc and ~/.oh-my-zsh.
 @test "\$HOME carries no chezmoi-managed file or oh-my-zsh config" {
   run docker run --rm "$IMAGE" sh -c '[ ! -e /home/vscode/.zshrc ] && [ ! -e /home/vscode/.oh-my-zsh ] && [ ! -e /home/vscode/.local/share/chezmoi ]'
   [ "$status" -eq 0 ]
@@ -68,28 +64,22 @@ setup_file() {
 }
 
 @test "the mise shims directory is prepended to sudo's secure_path" {
-  # /etc/sudoers is 0440 root:root (issue #17 made vscode the default user,
-  # so root must be requested explicitly here, unlike the plain stat check
-  # above).
+  # /etc/sudoers is 0440 root:root, so --user root is needed here.
   run docker run --rm --user root "$IMAGE" grep secure_path /etc/sudoers
   [ "$status" -eq 0 ]
   [[ "$output" == *'secure_path="/usr/local/share/mise/shims:'* ]]
 }
 
-# MISE_GLOBAL_CONFIG_FILE stays unset even with ADR-0020's baked default:
-# that pin ships as mise's *system* config (/etc/mise/config.toml), a
-# distinct and lower layer, not the global one.
+# ADR-0020's pin ships as mise's system config, a lower layer than global,
+# so MISE_GLOBAL_CONFIG_FILE stays unset.
 @test "MISE_GLOBAL_CONFIG_FILE is not set" {
   run docker run --rm "$IMAGE" sh -c 'printenv MISE_GLOBAL_CONFIG_FILE'
   [ "$status" -ne 0 ]
 }
 
-# ADR-0020: the dev image bakes a default Node so tooling that runs before
-# any project pin exists (npm-global helpers, hooks, installers invoked from
-# unpinned directories) has a runtime, and no fresh guest re-downloads it.
-# The pin ships as mise's system config, the layer a project pin overrides.
-# It is a concrete Node major, not the `lts` alias, so Renovate's mise
-# manager can bump it on the Node LTS schedule (issue #102).
+# ADR-0020: the dev image bakes a default Node so tooling running before
+# any project pin has a runtime. A concrete major, not the `lts` alias, so
+# Renovate's mise manager can bump it (issue #102).
 @test "the dev image carries a mise system config pinning a concrete Node major" {
   run docker run --rm "$IMAGE" cat /etc/mise/config.toml
   [ "$status" -eq 0 ]
@@ -102,16 +92,13 @@ setup_file() {
   [[ "$output" == v* ]]
 }
 
-# One test, not three: the three assertions share a single `mise install`,
-# which downloads a real Node build. Splitting them would triple that
-# download for no gain (ADR-0008 measures the same three outcomes together).
-# The project pins a major distinct from the baked default, so IN_PROJECT
-# genuinely proves the project config layers over /etc/mise/config.toml and
-# wins; OUTSIDE_PROJECT proves the baked system pin resolves rather than the
-# pre-ADR-0020 "No version is set for shim: node".
+# One test, not three: the assertions share one `mise install` (a real Node
+# download). The project pins a major distinct from the baked default, so
+# IN_PROJECT proves the project config wins and OUTSIDE_PROJECT proves the
+# baked pin resolves.
 #
-# Unreliable specifically when run from inside this repo's own workspace
-# devcontainer, not a regression - see docs/agents/gotchas.md.
+# Unreliable when run inside this repo's own devcontainer - see
+# docs/agents/gotchas.md.
 @test "a project pin overrides the baked default, through shims and under sudo" {
   run docker run --rm --user vscode "$IMAGE" zsh -lc '
     set -e
@@ -131,10 +118,8 @@ setup_file() {
   [[ "$output" != *"OUTSIDE_PROJECT=v22"* ]]
 }
 
-# ADR-0008's chown makes the shared data directory vscode-owned, so a global
-# npm install under the baked Node writes there with no sudo. (npm's own
-# ~/.npm cache still lands in $HOME at runtime, harmless, same as mise's own
-# ~/.cache/mise - ADR-0008.)
+# ADR-0008's chown makes the shared data directory vscode-owned, so a
+# global npm install under the baked Node writes there with no sudo.
 @test "a global npm install under the baked Node needs no sudo and lands in the shared data dir" {
   run docker run --rm --user vscode "$IMAGE" zsh -lc '
     set -e
@@ -173,10 +158,9 @@ setup_file() {
   [ "$output" = "/home/linuxbrew/.linuxbrew/bin/starship" ]
 }
 
-# Scoped to actual shell configuration, not /home/linuxbrew: the Cellar's own
-# bundled docs and completions mention "starship init" as documentation, and
-# that's not this image's concern. What matters is that no shell
-# configuration file evaluates it (ADR-0010).
+# Scoped to shell configuration, not /home/linuxbrew: the Cellar's bundled
+# docs mention "starship init" harmlessly. What matters is that no shell
+# config file evaluates it (ADR-0010).
 @test "no starship init line is written into any shell configuration" {
   run docker run --rm "$IMAGE" sh -c 'grep -rl "starship init" /etc/zsh /etc/profile.d /home/vscode 2>/dev/null'
   [ "$status" -ne 0 ]
@@ -188,9 +172,8 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
-# Homebrew and starship wiring only ever appends to /etc/zsh/zshenv (above);
-# this asserts /etc/zsh/zshrc carries none of it, i.e. it's left exactly as
-# whatever wrote it before this layer ran (Debian's zsh package).
+# Homebrew and starship wiring only appends to /etc/zsh/zshenv; /etc/zsh/zshrc
+# must carry none of it.
 @test "/etc/zsh/zshrc carries no Homebrew or starship configuration" {
   run docker run --rm "$IMAGE" sh -c 'grep -iE "brew|starship" /etc/zsh/zshrc'
   [ "$status" -ne 0 ]
@@ -208,9 +191,8 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
-# dive is a Homebrew formula, like starship, so it only resolves in a
-# non-interactive login shell where /etc/zsh/zshenv sources brew's shellenv
-# (same reasoning as the "brew resolves" test above).
+# dive is a Homebrew formula, so it only resolves in a login shell where
+# /etc/zsh/zshenv sources brew's shellenv.
 @test "dive resolves on PATH in a non-interactive login shell" {
   run docker run --rm --user vscode "$IMAGE" zsh -lc 'command -v dive'
   [ "$status" -eq 0 ]
@@ -242,8 +224,7 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
-# Issue #7's explicit exclusion list: single-repo tools that stay with
-# their repo rather than landing in the shared base.
+# Issue #7's exclusion list: single-repo tools that stay with their repo.
 @test "none of the explicitly excluded single-repo tools are present" {
   run docker run --rm "$IMAGE" sh -c '
     for tool in kubectl k9s helm flux talosctl talhelper sops age yq gptfdisk xorriso gemini-cli; do

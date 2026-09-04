@@ -1,26 +1,17 @@
 #!/usr/bin/env bats
 #
-# Runs against the real image built from images/agent/, not the Containerfile
-# or devcontainer.json source. See issue #1's "Test assertions" section:
-# assert through the door a user walks through.
+# Runs against the real image built from images/agent/ (issue #1: assert
+# through the door a user walks through).
 #
-# A plain `docker run` nests this image's own dockerd inside a container
-# whose root filesystem is already overlayfs, so /var/lib/docker needs its
-# own filesystem or the daemon fails to mount its first layer - the same
-# nested-overlay failure docs/research/0022 found for microsandbox's default
-# mount, worked around here with a scratch docker volume in place of msb's
-# disk-backed one. --privileged is this suite's own substitute for whatever
-# capabilities a real launch profile grants; it is not the launcher script's
-# own profile (that's exercised separately, against msb itself).
+# A `docker run` nests this image's dockerd inside an already-overlayfs
+# container, so /var/lib/docker needs its own filesystem (docs/research/0022);
+# a scratch docker volume stands in for msb's disk-backed mount. --privileged
+# substitutes for a real launch profile's capabilities.
 #
-# dockerd itself is started by docker-init.sh, installed by the
-# docker-in-docker devcontainer feature (images/agent/devcontainer.json);
-# the entrypoint drops the given command to vscode via runuser once the
-# daemon is up, so several assertions below check for that user rather
-# than root.
+# The entrypoint drops the command to vscode via runuser once dockerd is up,
+# so several assertions check for that user rather than root.
 #
-# Expects IMAGE to name an already-built image (set by `npm run test:agent`,
-# which passes the same tag `npm run build:agent` built).
+# Expects IMAGE to name an already-built image (set by `npm run test:agent`).
 
 setup_file() {
   : "${IMAGE:?set IMAGE to the image tag built by \`npm run build:agent\`}"
@@ -35,24 +26,18 @@ teardown() {
   docker volume rm -f "$volume" >/dev/null 2>&1 || true
 }
 
-# docker-init.sh (the docker-in-docker feature) prints its own startup
-# chatter to the same stream before handing off, so assertions below match
-# a substring rather than the whole of $output.
+# docker-init.sh prints startup chatter to the same stream, so assertions
+# match a substring rather than the whole of $output.
 @test "an explicit command runs and its output comes through" {
   run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" echo hello
   [ "$status" -eq 0 ]
   [[ "$output" == *"hello"* ]]
 }
 
-# Regression test for a bug this suite previously missed: the entrypoint's
-# own log-filtering step (silencing docker-init.sh's cgroup-nesting noise)
-# wrote its scratch file under /tmp, which docker-init.sh itself remounts
-# as a fresh tmpfs partway through its own setup - wiping the file before
-# the entrypoint could read it back, and leaking a "grep: ... No such file
-# or directory" line into every single invocation. Only ever exercised
-# under msb before, where /tmp happens to already be a mountpoint so the
-# remount (and the bug) never fired; this suite's own docker run is what
-# should have caught it, so this test exists specifically to keep it caught.
+# Regression: the entrypoint's log-filtering step wrote its scratch file
+# under /tmp, which docker-init.sh remounts as a fresh tmpfs mid-setup,
+# leaking a "grep: No such file or directory" line. Never fired under msb,
+# where /tmp is already a mountpoint; this suite's docker run catches it.
 @test "no entrypoint plumbing (grep/log-file errors) leaks into the output" {
   run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" echo hello
   [ "$status" -eq 0 ]
@@ -104,10 +89,9 @@ teardown() {
   [[ "$output" == *"container-ok"* ]]
 }
 
-# docs/research/0022's header finding: a trivial pull/run can pass while a
-# real multi-layer build still fails, because nested overlayfs only breaks
-# once a build actually exercises the snapshotter. This fixture is a build,
-# not just a run, for that reason.
+# docs/research/0022: a trivial pull/run can pass while a real multi-layer
+# build fails, since nested overlayfs only breaks once a build exercises
+# the snapshotter.
 @test "a real multi-layer docker build succeeds inside the guest" {
   run docker run --rm --privileged \
     -v "${volume}:/var/lib/docker" \
@@ -123,13 +107,10 @@ teardown() {
   [[ "$output" == *"layer3"* ]]
 }
 
-# Issue #66. There is no service manager in the guest, so dpkg cannot
-# restart the containerd docker-init.sh already started; an in-session
-# upgrade of containerd.io therefore leaves an old daemon forking a new
-# containerd-shim-runc-v2, which breaks every `docker run` for the rest of
-# the boot. The failure names nothing recognizable ("failed to create TTRPC
-# connection: unsupported protocol: Yunix"), so it is worth catching here
-# rather than in a session.
+# Issue #66: with no service manager, an in-session containerd.io upgrade
+# leaves the old daemon forking a new shim, breaking every `docker run` for
+# the boot with "failed to create TTRPC connection: unsupported protocol:
+# Yunix".
 @test "the docker engine packages are held against in-session upgrades" {
   run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" apt-mark showhold
   [ "$status" -eq 0 ]
@@ -138,10 +119,8 @@ teardown() {
   [[ "$output" == *"docker-ce-cli"* ]]
 }
 
-# The regression test proper for #66, run through the door the bug actually
-# came through rather than asserting on the hold alone: a real upgrade, then
-# a real container. This one goes red on the bug itself, not just on the
-# mechanism chosen to fix it, which is why it pays for a full apt upgrade.
+# The regression test proper for #66: a real upgrade, then a real
+# container, so it goes red on the bug itself, not just on the hold.
 @test "a docker run still works after an in-session apt upgrade" {
   run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" sh -c '
     set -e

@@ -1,50 +1,29 @@
 #!/usr/bin/env bats
 #
-# Argument-assembly tests for scripts/launch-agent-runtime.
+# Argument-assembly tests for scripts/launch-agent-runtime: a stub `msb`
+# earlier on PATH records the assembled command line and exits.
 #
-# The launcher's job is to turn a small set of flags into one long `msb run`
-# invocation, so the assembled command line is the thing worth asserting on.
-# A stub `msb` earlier on PATH records that command line and exits, which
-# makes these tests fast, deterministic, and runnable with no hypervisor,
-# no network, and no real image - the opposite of the live launches that
-# verified this script's earlier behaviour (issues #32, #33, #34, #54).
-#
-# The stub records one argument per line, never "$*", because the property
-# most worth protecting here is that a scope stays a single argument: a
-# `github.com,api.github.com` that word-split into two would read identically
-# in a flattened string and be wrong on the wire. The two scope assertions
-# below were confirmed to go red against a deliberately word-split build,
-# rather than only ever observed green.
-#
-# What a stub cannot check is whether msb honours what it was handed. That
-# the guest holds only a placeholder was verified separately by a live
-# launch with a dummy token (it came back as msb's own synthetic stand-in
-# value, not the sentinel - written here without the literal string per
-# issue #87); that `gh` actually authenticates against the scoped hosts
-# needs a live launch with a real token, and is recorded as such in issue
-# #77.
+# The stub records one argument per line, never "$*", so a scope that
+# word-split into two arguments fails here rather than reading identically
+# in a flattened string. A stub cannot check whether msb honours what it
+# was handed; that is live-checked separately (issues #77, #87).
 
 setup() {
   stub_dir="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$stub_dir"
   export MSB_ARGS_FILE="$BATS_TEST_TMPDIR/msb-args"
-  # The stub records the GH_TOKEN it inherits as well as its arguments.
-  # Without this, nothing would notice if the launcher stopped exporting a
-  # stdin-supplied token: the forwarded *name* would still look right while
-  # msb had no value to resolve.
+  # The stub records the GH_TOKEN it inherits, so a launcher that stopped
+  # exporting a stdin-supplied token is noticed even though the forwarded
+  # name still looks right.
   export MSB_ENV_FILE="$BATS_TEST_TMPDIR/msb-env"
 
-  # The launcher now requires --github-token to name a variable that is
-  # actually set, so that a literal token value is rejected rather than
-  # forwarded into argv. The value is irrelevant here - only msb ever
-  # resolves it, and msb is stubbed.
+  # --github-token needs a variable that is set; the value is irrelevant
+  # here since only the stubbed msb resolves it.
   export GH_TOKEN="not-a-real-token"
 
-  # The launcher must not call jq (issue #83). Exiting 127 is not enough on
-  # its own: sandbox_is_running is called as `... || return 0`, which
-  # suppresses set -e inside it, so a jq failure there would be swallowed
-  # and the suite would stay green. The stub therefore records the call,
-  # and the test below asserts on the recording rather than on a failure.
+  # The launcher must not call jq (issue #83). Exit 127 alone isn't enough:
+  # sandbox_is_running runs as `... || return 0`, which suppresses set -e,
+  # so the stub records the call and the test asserts on the recording.
   export JQ_CALLED_FILE="$BATS_TEST_TMPDIR/jq-called"
   cat > "$stub_dir/jq" <<'STUB'
 #!/usr/bin/env bash
@@ -54,14 +33,13 @@ STUB
   chmod +x "$stub_dir/jq"
 
   # Answers just enough for the launcher to reach its final `exec msb run`:
-  # no sandbox exists, every volume already exists (so nothing is created),
-  # and `run` records its arguments instead of booting anything.
+  # no sandbox exists, every volume already exists, `run` records its args.
   cat > "$stub_dir/msb" <<'STUB'
 #!/usr/bin/env bash
 case "$1" in
   list) ;;
   volume)
-    # `volume inspect` succeeding means ensure_volume never calls create.
+    # Succeeding means ensure_volume never calls create.
     exit 0
     ;;
   run)
@@ -70,8 +48,7 @@ case "$1" in
     exit 0
     ;;
   *)
-    # Loud rather than a silent exit 0, which would let an unrecognized
-    # subcommand turn into a passing test that asserted nothing.
+    # Loud, so an unrecognized subcommand can't become a silent pass.
     echo "msb stub: unexpected subcommand: $1" >&2
     exit 64
     ;;
@@ -81,9 +58,8 @@ STUB
   export PATH="$stub_dir:$PATH"
 }
 
-# Keeps every case to the one flag under test: an explicit --name skips
-# sandbox resolution, an explicit --clone-url skips the git remote lookup,
-# and a COMMAND keeps --persist-claude-auth off (and so its extra mount).
+# Explicit --name skips sandbox resolution, --clone-url skips the remote
+# lookup, and a COMMAND keeps --persist-claude-auth (and its mount) off.
 launch() {
   "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" \
     --name test-session \
@@ -91,8 +67,8 @@ launch() {
     "$@" -- true
 }
 
-# One whole argument, matched as a full line - so a value that word-split
-# into two arguments fails here rather than passing on a substring.
+# Matched as a whole line, so a word-split value fails rather than matching
+# on a substring.
 has_arg() {
   grep -Fxq -- "$1" "$MSB_ARGS_FILE"
 }
@@ -108,9 +84,7 @@ has_flag_value() {
   has_flag_value "--secret" "GH_TOKEN@github.com,api.github.com"
 }
 
-# github.com alone leaves `gh` talking to an out-of-scope api.github.com and
-# receiving the placeholder, which GitHub rejects as an invalid token - the
-# exact failure #77 was filed for.
+# github.com alone leaves `gh` on an out-of-scope api.github.com (issue #77).
 @test "--github-token never scopes the token to github.com alone" {
   run launch --github-token GH_TOKEN
   [ "$status" -eq 0 ]
@@ -144,10 +118,8 @@ has_flag_value() {
   has_flag_value "--secret" "OTHER@example.com"
 }
 
-# `--github-token "$GH_TOKEN"` is the natural slip, and it would put the real
-# token into this process's argv where `ps` can read it. The charset check
-# alone cannot catch it, since real tokens are identifier-shaped; being an
-# unset variable is what gives them away.
+# `--github-token "$GH_TOKEN"` would put the token in argv. Tokens are
+# identifier-shaped, so being an unset variable is what gives them away.
 @test "a literal token value is rejected rather than forwarded" {
   run launch --github-token "ghp_thisisnotarealtokenvalue123456789"
   [ "$status" -ne 0 ]
@@ -155,8 +127,7 @@ has_flag_value() {
   [ ! -f "$MSB_ARGS_FILE" ]
 }
 
-# Whatever it rejects, it must never print it back: an error message is one
-# more place a real token could end up.
+# An error message is one more place a real token could end up.
 @test "the rejection never echoes back what it rejected" {
   run launch --github-token "ghp_thisisnotarealtokenvalue123456789"
   [ "$status" -ne 0 ]
@@ -176,9 +147,8 @@ has_flag_value() {
   [ ! -f "$MSB_ARGS_FILE" ]
 }
 
-# Guards the existing contract: the violation default belongs to
-# --github-token alone and must not leak onto plain --secret launches,
-# which have always left the action to msb unless asked otherwise.
+# The violation default belongs to --github-token alone and must not leak
+# onto plain --secret launches.
 @test "a plain --secret launch is left exactly as it was" {
   run launch --secret OTHER@example.com
   [ "$status" -eq 0 ]
@@ -186,18 +156,15 @@ has_flag_value() {
   ! has_arg "--on-secret-violation"
 }
 
-# `--github-token -` reads the token itself rather than naming a variable
-# that holds it, so the operator never has to export anything. Only the
-# non-tty half is testable here; the prompt branch needs a real terminal
-# and is checked live instead.
+# Only the non-tty half is testable here; the prompt branch needs a real
+# terminal and is checked live instead.
 @test "--github-token - reads the token from stdin and forwards a name" {
   run launch --github-token - <<< "piped-token-value"
   [ "$status" -eq 0 ]
   has_flag_value "--secret" "GH_TOKEN@github.com,api.github.com"
 }
 
-# The whole point of forwarding a name is that the value never reaches the
-# command line, where `ps` would show it.
+# The value must never reach the command line, where `ps` would show it.
 @test "a piped token never appears in the msb command line" {
   run launch --github-token - <<< "piped-token-value"
   [ "$status" -eq 0 ]
@@ -210,9 +177,8 @@ has_flag_value() {
   has_flag_value "--on-secret-violation" "block-and-log"
 }
 
-# `read` returns non-zero at EOF when the input has no trailing newline,
-# which under `set -e` would kill the script even though the variable was
-# populated. Piping from a password manager is exactly where that happens.
+# `read` returns non-zero at EOF on input with no trailing newline (a
+# password-manager pipe), which under `set -e` would kill the script.
 @test "a piped token without a trailing newline still works" {
   run launch --github-token - < <(printf 'no-trailing-newline')
   [ "$status" -eq 0 ]
@@ -225,10 +191,9 @@ has_flag_value() {
   [ ! -f "$MSB_ARGS_FILE" ]
 }
 
-# Forwarding the right name is only half the job: msb resolves that name
-# against the launcher's own environment, so a stdin-supplied token has to
-# actually be exported there. GH_TOKEN is unset first, or setup()'s own
-# export would mask a launcher that stopped exporting anything.
+# msb resolves the forwarded name against the launcher's environment, so a
+# stdin-supplied token must be exported there. GH_TOKEN is unset first, or
+# setup()'s export would mask a launcher that stopped exporting.
 @test "a stdin-supplied token reaches the environment msb inherits" {
   unset GH_TOKEN
   run launch --github-token - <<< "piped-token-value"
@@ -236,9 +201,8 @@ has_flag_value() {
   [ "$(cat "$MSB_ENV_FILE")" = "piped-token-value" ]
 }
 
-# A token piped from a CRLF file, or pasted with a stray space, would
-# otherwise be forwarded intact and rejected inside the guest as an invalid
-# token - the misdirection this whole issue is about.
+# A CRLF-piped or space-padded token would otherwise be forwarded intact
+# and rejected inside the guest (issue #77).
 @test "a piped token loses a trailing carriage return and surrounding spaces" {
   unset GH_TOKEN
   run launch --github-token - < <(printf ' goodtoken \r\n')
@@ -246,9 +210,8 @@ has_flag_value() {
   [ "$(cat "$MSB_ENV_FILE")" = "goodtoken" ]
 }
 
-# The usage text promises "a second one replaces the first". That has to
-# hold across the two forms, not just within each of them, or whichever
-# form the code happens to favour wins over whatever the operator typed.
+# "A second one replaces the first" has to hold across the two forms, not
+# just within each.
 @test "a later --github-token name replaces an earlier -" {
   export NAMED_TOKEN_VAR="named-value"
   run launch --github-token - --github-token NAMED_TOKEN_VAR <<< "piped-token-value"
@@ -271,10 +234,8 @@ has_flag_value() {
   ! has_arg "-@github.com,api.github.com"
 }
 
-# jq was an undeclared host prerequisite: CI ships it, so nothing noticed
-# (issue #83). The sandbox lookup is the path that used it, so a launch
-# that resolves its own name exercises it - unlike launch(), which passes
-# --name and skips resolution.
+# The sandbox lookup is the path that used jq (issue #83), so a launch that
+# resolves its own name exercises it - unlike launch(), which passes --name.
 @test "a launch never calls jq" {
   run "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" \
     --clone-url https://example.invalid/repo.git -- true

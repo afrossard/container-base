@@ -12,31 +12,22 @@
 #                        prompts if more than one matches.
 #   --image REF          agent image to launch (default: the pinned
 #                        -agent image in `image=` below, which
-#                        release-please bumps; not repeated here, so it
-#                        cannot drift)
-#   --github-token ENV   inject a GitHub token scoped to both hosts a
-#                        session needs: github.com for git, api.github.com
-#                        for gh. ENV is a host env var name, not a literal
-#                        value. Scoping to github.com alone leaves every gh
-#                        command failing with "the token is invalid", so
-#                        prefer this over spelling the scope out by hand
-#                        (issue #77). Implies --on-secret-violation
-#                        block-and-log unless that flag is given explicitly.
-#                        Give it at most once; a second one replaces the
-#                        first, since one session has one GitHub identity.
-#                        Pass `-` instead of a name to supply the token
-#                        itself on stdin, so nothing need be exported:
-#                        prompted (hidden) when stdin is a terminal, read
-#                        as one line when it isn't, e.g.
-#                          launch-agent-runtime --github-token -
+#                        release-please bumps)
+#   --github-token ENV   inject a GitHub token scoped to github.com (git)
+#                        and api.github.com (gh); scoping to github.com
+#                        alone breaks every gh command (issue #77). ENV is
+#                        a host env var name, not a value. Implies
+#                        --on-secret-violation block-and-log. At most once.
+#                        Pass `-` to read the token on stdin instead:
+#                        prompted (hidden) at a terminal, one line
+#                        otherwise, e.g.
 #                          pass show gh/pat | launch-agent-runtime --github-token -
 #   --secret ENV@HOST    forwarded to `msb run --secret` (repeatable); ENV
 #                        is a host env var name, not a literal value
 #   --on-secret-violation ACTION
 #                        forwarded to `msb run --on-secret-violation`
 #                        (block, block-and-log, block-and-terminate,
-#                        passthrough; recommended: block-and-log whenever
-#                        --secret is used)
+#                        passthrough; recommended: block-and-log with --secret)
 #   --memory SIZE        forwarded to `msb run --memory` (default: 4G)
 #   --cpus N             forwarded to `msb run --cpus` (default: 4)
 #   --max-memory SIZE    forwarded to `msb run --max-memory` (default: 16G)
@@ -58,9 +49,8 @@
 #   CLAUDE_AUTH_VOLUME   ~/.claude volume used by --persist-claude-auth
 #                        (default: agent-claude-creds)
 
-# Not -u: macOS ships bash 3.2 (GPLv3 avoidance), where `set -u` treats
-# "${secrets[@]}" as unbound whenever the array is still empty - a real
-# footgun found by running this script, not a style choice.
+# Not -u: bash 3.2 (macOS) treats "${secrets[@]}" as unbound while the
+# array is still empty.
 set -eo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -83,10 +73,9 @@ memory="4G"
 cpus="4"
 max_memory="16G"
 
-# "name<TAB>status" lines for sandboxes matching this repo's label, plus
-# any exact-name match (covers sandboxes created before labels existed).
-# A name in neither status list is reported as "unknown" rather than
-# dropped, so a sandbox in some third state is still offered for reuse.
+# "name<TAB>status" for sandboxes matching this repo's label plus any
+# exact-name match (pre-label sandboxes). A name in neither status list is
+# reported "unknown", not dropped.
 matching_sandboxes() {
   local base="$1" names running stopped name status
   running=$(msb list --running -q 2>/dev/null || true)
@@ -117,9 +106,8 @@ matching_sandboxes() {
   done <<<"$names"
 }
 
-# Confirms before replacing a running sandbox (honours --force). Sets
-# $name directly rather than via command substitution, so `exit` here
-# still ends the whole script, not just a subshell.
+# Confirms before replacing a running sandbox (honours --force). Sets $name
+# directly, not via command substitution, so `exit` ends the whole script.
 confirm_replace_if_running() {
   local target="$1" offer_new="$2" choice
   sandbox_is_running "$target" || return 0
@@ -153,9 +141,8 @@ confirm_replace_if_running() {
   fi
 }
 
-# Reuses the one existing sandbox for this repo if there's exactly one,
-# asks if there's more than one, mints `<repo>-sandbox` (or
-# `-sandbox-NNNN` on collision) if there's none yet.
+# Reuses the one sandbox for this repo, asks if several, mints
+# `<repo>-sandbox` (or `-sandbox-NNNN` on collision) if none.
 resolve_name() {
   local base matches count target choice
   base=$(repo_name)
@@ -202,23 +189,16 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     --github-token)
-      # A literal `-` means "read the token itself, from stdin" - see the
-      # read further down for why it happens there and not here. Recorded
-      # as intent only, so it needs no lookahead: `-` is an ordinary value
-      # as far as the parser is concerned.
+      # A literal `-` means read the token from stdin, done further down.
       if [ "$2" = "-" ]; then
         github_token_from_stdin=1
         shift 2
         continue
       fi
-      # Takes the NAME of a variable, and `--github-token "$GH_TOKEN"` is
-      # the obvious slip - it would put the real token in this process's
-      # own argv, readable by anyone who can run `ps`, and then hand it to
-      # msb as a host to scope against. Neither check may echo what it
-      # rejected, since the rejected thing is exactly what must not be
-      # printed. A charset check alone would not catch it (real tokens are
-      # identifier-shaped: `ghp_...`, `github_pat_...`), so the load-bearing
-      # half is the second: a token value is not a variable that is set.
+      # Takes the NAME of a var. `--github-token "$GH_TOKEN"` would leak the
+      # token into argv (visible to `ps`). Tokens are identifier-shaped, so
+      # the charset check alone won't catch the slip - the set-check does.
+      # Neither check echoes what it rejected.
       case "$2" in
         '' | [0-9]* | *[!A-Za-z0-9_]*)
           echo "launch-agent-runtime: --github-token takes the name of a host environment variable (e.g. GH_TOKEN), not a token value" >&2
@@ -285,7 +265,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-# After the parse loop, so --help still works on a machine with neither.
+# After the parse loop, so --help works without them.
 require_tools msb git
 
 if [ -z "$clone_url" ]; then
@@ -295,13 +275,11 @@ if [ -z "$clone_url" ]; then
   fi
 fi
 
-# No command: default to an interactive zsh, not bash - zsh alone sources
-# /etc/zsh/zshenv (ADR-0010), where the dev image's PATH additions live.
+# No command: default to zsh, not bash - only zsh sources /etc/zsh/zshenv
+# (ADR-0010), where the image's PATH additions live.
 tty_flag="--no-tty"
 if [ "$#" -eq 0 ]; then
-  # Unset $persist_claude_auth means neither flag was given: default it
-  # here, before $# changes below, since "no command" is exactly the
-  # condition the default depends on.
+  # Neither flag given: default here, before $# changes below.
   : "${persist_claude_auth:=1}"
   set -- zsh
   tty_flag="-t"
@@ -315,31 +293,20 @@ else
   offer_new=0
 fi
 
-# Applies to an explicit --name too, not just a resolved one - the same
-# silent-kill risk exists either way (see the function's own comment for
-# why "start a new one" is only offered for a resolved name).
+# Applies to an explicit --name too - same silent-kill risk either way.
 confirm_replace_if_running "$name" "$offer_new"
 echo "launch-agent-runtime: session name: $name" >&2
 
-# `--github-token -` reads the token here rather than in the parse loop, so
-# that aborting the replace prompt above doesn't mean having typed a secret
-# for a launch that never happened.
+# `--github-token -` reads the token here, not in the parse loop, so
+# aborting the replace prompt above doesn't waste a typed secret.
 #
-# The name is not free: whatever name is forwarded is the name the guest
-# sees (the value is a placeholder, the name is preserved), and `gh` inside
-# the guest reads GH_TOKEN or GITHUB_TOKEN and nothing else. Parking a
-# prompted token under a tidier internal name would leave `gh` unable to
-# find it - the exact failure this flag exists to remove. Exporting here
-# touches only this process's own environment, never the caller's shell.
+# The forwarded var name reaches the guest as-is, and `gh` there reads only
+# GH_TOKEN or GITHUB_TOKEN, so the name must be one of those. Exporting here
+# touches only this process.
 if [ "$github_token_from_stdin" = "1" ]; then
-  # Both branches read the same way and guard the same failure, differing
-  # only in whether they prompt and hide. `|| true` because read reports
-  # EOF in two ordinary situations - input whose last line carries no
-  # trailing newline (piping from a password manager), and Ctrl-D at the
-  # prompt - and `set -e` would otherwise kill the launch outright: in the
-  # tty case without printing anything at all, not even the newline that
-  # ends the prompt line. Emptiness is checked below either way, so the
-  # deliberate Ctrl-D and the truncated pipe get the same diagnostic.
+  # `|| true`: read reports EOF for input with no trailing newline (a
+  # password-manager pipe) and for Ctrl-D, and `set -e` would kill the
+  # launch. Emptiness is checked below either way.
   if [ -t 0 ]; then
     printf 'GitHub token (input hidden): ' >&2
     IFS= read -rs prompted_token || true
@@ -348,11 +315,9 @@ if [ "$github_token_from_stdin" = "1" ]; then
     IFS= read -r prompted_token || true
   fi
 
-  # A token piped from a CRLF source arrives with a trailing carriage
-  # return, and one pasted by hand often carries surrounding spaces.
-  # Neither is part of any GitHub token, and forwarding either produces an
-  # "invalid token" inside the guest - the same failure, and the same
-  # misdirection, that issue #77 exists to remove. `[:space:]` covers \r.
+  # Strip surrounding whitespace and CR: a CRLF pipe or a hand-paste adds
+  # bytes that aren't part of any token and produce "invalid token" in the
+  # guest (issue #77). `[:space:]` covers \r.
   prompted_token="${prompted_token#"${prompted_token%%[![:space:]]*}"}"
   prompted_token="${prompted_token%"${prompted_token##*[![:space:]]}"}"
 
@@ -365,17 +330,12 @@ if [ "$github_token_from_stdin" = "1" ]; then
   github_token_env="GH_TOKEN"
 fi
 
-# Both --github-token paths converge here on a variable name. Why the scope
-# names two hosts is in the usage text above, not repeated.
+# Both --github-token paths converge here on a variable name.
 if [ -n "$github_token_env" ]; then
   secrets+=(--secret "${github_token_env}@github.com,api.github.com")
 
-  # Applies the recommendation the --on-secret-violation help text already
-  # makes, and only when the caller expressed no preference of their own.
-  # Note this tightens the default rather than widening it: quietly adding
-  # a host to a secret's scope would hide a security-relevant fact from the
-  # command a reader typed, which is why --secret is deliberately left to
-  # mean exactly what it says and this flag is a separate, visible opt-in.
+  # Applies the --on-secret-violation recommendation, only when the caller
+  # gave none. This tightens the default, doesn't widen it.
   if [ "${#violation_flag[@]}" -eq 0 ]; then
     violation_flag=(--on-secret-violation block-and-log)
   fi
@@ -396,11 +356,10 @@ if [ "$persist_claude_auth" = "1" ]; then
   )
 fi
 
-# Pins network egress explicitly (public reachable, LAN denied) instead
-# of relying on msb's implicit default, which silently reverts to no
-# egress at all the moment any other --net-rule is added below. A
-# hostname allowlist was rejected: this workload's own egress isn't
-# enumerable (apt, GHCR, npm, GitHub, ...). See ADR-0013.
+# Pins network egress explicitly: msb's implicit default reverts to no
+# egress once any --net-rule is added. A hostname allowlist was rejected -
+# this workload's egress isn't enumerable (apt, GHCR, npm, GitHub, ...).
+# See ADR-0013.
 exec msb run --replace "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
   --memory "$memory" --cpus "$cpus" --max-memory "$max_memory" \
   --net public \

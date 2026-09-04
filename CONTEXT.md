@@ -41,9 +41,9 @@ Dependencies that serve only this repo's own build or CI are not shipped depende
 _Avoid_: runtime dependency - nothing here runs at consumer runtime; the distinction is what ships, not what runs.
 
 **Host prerequisite**:
-A tool the operator installs on their own machine, so that this repo's host-side scripts run: `msb` and `git`, and nothing else.
-It is not a shipped dependency, because no image carries it and no `npm ci` supplies it.
-The bar is high, and higher than the bar for a tool in the dev image: a dev image tool is useful and disposable, while a host prerequisite is a manual install on a machine this repo does not own and cannot clean up.
+A tool the operator installs on their own machine so this repo's host-side scripts run: `msb` and `git`, and nothing else.
+Not a shipped dependency: no image carries it and no `npm ci` supplies it.
+The bar is higher than for a dev image tool, since it is a manual install on a machine this repo cannot clean up.
 _Avoid_: host dependency - "dependency" reads as something a tool resolves for you, and this is the opposite.
 
 **Reference profile**:
@@ -62,11 +62,11 @@ It is the artifact a per-container-VM tool boots directly as a VM guest (ADR-001
 _Avoid_: agent runtime - that names the running VM this image becomes once launched, not the artifact GHCR holds.
 
 **Launcher**:
-`scripts/launch-agent-runtime`, the host-side script that boots the agent image as a microsandbox guest: a disk-backed volume for `/var/lib/docker` (msb's default nests overlayfs on overlayfs, which fails a real build), `--secret` credential injection, and a repo-derived session name that reuses (replaces) its own prior sandbox.
-The image itself still has no default command; the launcher supplies its own - an interactive shell with a real tty - when none is given, so a bare invocation behaves like `docker run -it` rather than erroring.
-It also composes everything a session needs that the image deliberately does not carry: the workspace clone, the `dotfiles-bootstrap` run that applies the operator's conventions (ADR-0016), and the repository-scoped credential the session pushes with (ADR-0015).
+`scripts/launch-agent-runtime`, the host-side script that boots the agent image as a microsandbox guest: a disk-backed `/var/lib/docker` volume (msb's default nests overlayfs on overlayfs, which fails a real build), `--secret` credential injection, and a repo-derived session name that replaces its own prior sandbox.
+When given no command it supplies an interactive shell with a real tty, so a bare invocation behaves like `docker run -it`.
+It also composes what the image deliberately does not carry: the workspace clone, the `dotfiles-bootstrap` run (ADR-0016), and the repository-scoped push credential (ADR-0015).
 `scripts/cleanup-agent-sessions` removes stopped sessions and their volumes.
-Both are host-side tooling, not container images - a narrow, documented exception to this repo's image-only scope (ADR-0001, ADR-0014).
+Both are host-side tooling, not images - a narrow, documented exception to this repo's image-only scope (ADR-0001, ADR-0014).
 
 **Agent session**:
 One unit of autonomous agent work, bounded by the lifetime of the agent runtime it runs in.

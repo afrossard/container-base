@@ -1,21 +1,17 @@
 #!/usr/bin/env bats
 #
-# Tests for scripts/cleanup-agent-sessions, which had none before issue #83
-# moved its sandbox lookup into the shared lib. A fault in that helper is now
-# a fault in both host-side scripts, so the script that removes things is the
-# one worth covering: its whole job is to refuse in the cases where removing
-# would be wrong.
+# Tests for scripts/cleanup-agent-sessions: its job is to refuse in the
+# cases where removing would be wrong.
 #
 # A stub msb answers from STUB_ALL and STUB_RUNNING and records what it was
-# asked to remove, so nothing here needs a hypervisor or a real sandbox.
+# asked to remove.
 
 setup() {
   stub_dir="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$stub_dir"
   export MSB_RM_FILE="$BATS_TEST_TMPDIR/msb-rm"
 
-  # See the launcher suite for why a recording stub, not exit 127 alone:
-  # the callers test these helpers with `||`, which suppresses set -e.
+  # A recording stub, not exit 127 alone: callers use `||`, suppressing set -e.
   export JQ_CALLED_FILE="$BATS_TEST_TMPDIR/jq-called"
   cat > "$stub_dir/jq" <<'STUB'
 #!/usr/bin/env bash
@@ -77,8 +73,7 @@ cleanup() {
   grep -Fxq alpha "$MSB_RM_FILE"
 }
 
-# Distinct from "exists but is stopped": an unknown name is the operator's
-# typo, and silently doing nothing would read as success.
+# An unknown name is a typo; silently doing nothing would read as success.
 @test "a name that does not exist is reported, not ignored" {
   export STUB_ALL="alpha" STUB_RUNNING=""
   run cleanup --name beta --force

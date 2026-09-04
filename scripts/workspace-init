@@ -1,54 +1,30 @@
 #!/bin/sh
-# Registered into the guest as `workspace-init` (msb run --script-path,
-# scripts/launch-agent-runtime), issue #32 / ADR-0015's workspace step: a
-# full clone made inside the guest at launch, composed by the launcher
-# rather than baked into the image. Every launch runs this first, then
-# execs into the given command from inside the clone - the interactive
-# default (`zsh`) and an explicit COMMAND compose identically, with
-# neither side special-cased.
+# Registered into the guest as `workspace-init` (scripts/launch-agent-runtime),
+# ADR-0015: a full clone made inside the guest at launch. Runs first, then
+# execs the given command from inside the clone.
 #
-# No --depth: this repo's own /code-review skill relies on git
-# merge-base, which a shallow clone breaks. No --ref flag: a full clone
-# already carries every pushed ref, and a ref flag useful enough to want
-# would default to the host's current branch and fail at boot whenever
-# that branch is unpushed (ADR-0015).
+# No --depth: /code-review's git merge-base needs full history. No --ref: a
+# ref flag would default to the host's current branch and fail at boot
+# whenever that branch is unpushed (ADR-0015).
 set -eu
 
 : "${WORKSPACE_CLONE_URL:?WORKSPACE_CLONE_URL must be set - scripts/launch-agent-runtime always sets it}"
 : "${PERSIST_CLAUDE_AUTH:=0}"
 
-# Issue #54 (see launch-agent-runtime's own Environment comment for why
-# `--mount-file` was dropped in favor of this): under --persist-claude-auth
-# (PERSIST_CLAUDE_AUTH=1, set by launch-agent-runtime), ~/.claude.json -
-# Claude Code's own state, kept as a sibling of ~/.claude rather than
-# inside it - is symlinked into CLAUDE_AUTH_VOLUME, the same dir-kind
-# mount ~/.claude itself already relies on to survive a relaunch. Every
-# write Claude Code makes to the "file" then lands inside that proven
-# mount, rather than a second, distrusted mechanism. Runs every launch,
-# not just the first, the same way dotfiles-bootstrap does below: a fresh
-# guest's ~/.claude.json starts as whatever the image ships, and must be
-# replaced with the symlink before Claude Code ever reads or writes it.
-# Skipped entirely without --persist-claude-auth - with no volume mounted
-# at ~/.claude, the target directory would just be plain ephemeral guest
-# disk, no different from leaving ~/.claude.json alone.
+# Issue #54: under --persist-claude-auth, symlink ~/.claude.json (Claude Code
+# state, a sibling of ~/.claude) into the ~/.claude volume so its writes
+# survive relaunch. Every launch: a fresh guest ships its own ~/.claude.json
+# that must be replaced before Claude Code reads it.
 if [ "$PERSIST_CLAUDE_AUTH" = "1" ]; then
   claude_json="$HOME/.claude/claude.json"
   [ -e "$claude_json" ] || echo '{}' >"$claude_json"
   ln -sfn "$claude_json" "$HOME/.claude.json"
 fi
 
-# dotfiles-bootstrap runs first (issue #33 / ADR-0016): the operator's
-# global AGENTS.md conventions - no em dashes, never self-attribute as a
-# commit co-author, one sentence per line in Markdown, and the rest -
-# apply from session start, not just to whatever this repo's own
-# AGENTS.md happens to restate. It is already idempotent (ADR-0009's
-# cold-init versus warm-update split) and already a no-op with
-# DOTFILES_REPO unset, so it runs unconditionally here rather than being
-# guarded again. Running it every launch, not just the first one, is the
-# point: under --persist-claude-auth, ~/.claude/CLAUDE.md (a symlink to
-# ../AGENTS.md) lands in the persistent volume while its target lands on
-# the guest's ephemeral disk, so a launch that skipped this would find a
-# symlink to a file that no longer exists.
+# dotfiles-bootstrap (ADR-0016): idempotent and a no-op with DOTFILES_REPO
+# unset, so unconditional. Every launch, not just the first: under
+# --persist-claude-auth the persistent ~/.claude/CLAUDE.md symlinks to an
+# ephemeral-disk target that a skipped launch would leave dangling.
 dotfiles-bootstrap
 
 repo_dir="$HOME/$(basename "$WORKSPACE_CLONE_URL" .git)"

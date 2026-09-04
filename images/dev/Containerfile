@@ -2,35 +2,27 @@ FROM debian:trixie-slim
 
 ENV LANG=C.UTF-8
 
-# uv owns the Python interpreter (ADR-0006). The shell installer targets
-# $HOME and appends to ~/.zshrc; the documented COPY --from form avoids both.
+# uv owns the Python interpreter (ADR-0006). COPY --from avoids the shell
+# installer's $HOME writes.
 COPY --from=ghcr.io/astral-sh/uv:0.12.9 /uv /uvx /bin/
 
-# mise owns Node and every language added later (ADR-0006), installed from
-# its own apt repository rather than the `mise.run` script, which also
-# targets $HOME.
+# mise owns Node and every language added later (ADR-0006), from apt rather
+# than the `mise.run` script, which targets $HOME.
 #
-# zsh and sudo are installed here, ahead of the common-utils feature that
-# configures them further, so /etc/zsh/zshenv and /etc/sudoers already exist
-# for the appends below. The feature detects both already present and
-# leaves this layer's edits alone.
+# zsh and sudo are installed here so /etc/zsh/zshenv and /etc/sudoers exist
+# for the appends below; the common-utils feature leaves them alone.
 ENV MISE_DATA_DIR=/usr/local/share/mise
 
-# The system-level default Node pin (ADR-0020). Its full rationale lives in
-# the file itself; in short, mise reads /etc/mise/config.toml as the lowest
-# layer of its config precedence, so a bare `node` resolves outside any
-# project while a project's own .mise.toml still layers over it and wins.
-# Copied in before the `mise install` below, which is what reads it.
+# System-level default Node pin (ADR-0020): mise reads /etc/mise/config.toml
+# as its lowest config layer, so a bare `node` resolves outside any project
+# while a project .mise.toml still wins. Read by the `mise install` below.
 COPY mise/config.toml /etc/mise/config.toml
 
-# ca-certificates, curl and git are runtime requirements of the Homebrew
-# installer below, not of mise; they're installed in this same layer to
-# share one apt-get update/install with the rest of the base tooling.
+# ca-certificates, curl and git are for the Homebrew installer below, in
+# this layer to share one apt-get with the base tooling.
 #
-# `mise install` with no arguments resolves the pin from the system config
-# copied in above and bakes it (ADR-0020): the runtime lands in the shared,
-# vscode-owned data directory, so no fresh guest or unpinned devcontainer
-# re-downloads it. The chown runs after, since the build runs as root.
+# `mise install` with no arguments bakes the system-config pin (ADR-0020)
+# into the shared vscode-owned data directory. chown runs after, as root.
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -47,12 +39,10 @@ RUN apt-get update \
     && mise install \
     && chown -R 1000:1000 "$MISE_DATA_DIR"
 
-# mise runs system-wide, in shims mode (ADR-0008): the data directory above
-# is shared and vscode-owned, the shims directory is on PATH for every
-# shell, and it is prepended to sudo's secure_path, the only one of the
-# three sudo actually reads. MISE_GLOBAL_CONFIG_FILE stays unset: the baked
-# default Node ships as mise's system config (/etc/mise/config.toml,
-# ADR-0020), not its global one, and per-project pins still win over it.
+# mise runs system-wide in shims mode (ADR-0008): shims on PATH for every
+# shell and prepended to sudo's secure_path, the only one sudo reads.
+# MISE_GLOBAL_CONFIG_FILE stays unset - the baked pin is mise's system
+# config (ADR-0020), not its global one, so per-project pins still win.
 RUN sed -i \
         "s|^Defaults\tsecure_path=\"|Defaults\tsecure_path=\"${MISE_DATA_DIR}/shims:|" \
         /etc/sudoers \
@@ -60,14 +50,10 @@ RUN sed -i \
     && printf '\n# mise shims (ADR-0008)\n%s\n' "$shims_line" >> /etc/zsh/zshenv \
     && printf '# mise shims (ADR-0008)\n%s\n' "$shims_line" > /etc/profile.d/mise-shims.sh
 
-# Homebrew, for parity with the Mac. Its installer refuses to run as root
-# unless it detects a container; that check looks for /.dockerenv,
-# which classic `docker run` sets up but a BuildKit `RUN` step does not, so
-# it is created and removed around the install. The prefix is chowned to
-# the eventual vscode uid/gid afterward, same as mise's data directory
-# above, so `brew install` needs no sudo once the common-utils feature
-# creates that user. shellenv goes in /etc/zsh/zshenv, never a file under
-# $HOME, so non-interactive shells get it too (ADR-0010).
+# Homebrew, for parity with the Mac. Its installer refuses root unless it
+# sees /.dockerenv, which a BuildKit `RUN` step doesn't create, so it is
+# faked around the install. Prefix chowned to vscode afterward. shellenv
+# goes in /etc/zsh/zshenv so non-interactive shells get it too (ADR-0010).
 ENV HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
 ENV HOMEBREW_NO_ANALYTICS=1
 ENV NONINTERACTIVE=1
@@ -81,29 +67,21 @@ RUN touch /.dockerenv \
     && printf '\n# Homebrew shellenv (ADR-0010)\n%s\n' \
         "$("$HOMEBREW_PREFIX/bin/brew" shellenv)" >> /etc/zsh/zshenv
 
-# The starship binary ships, but shell ergonomics are a personal-dotfiles
-# concern (ADR-0010): no `starship init` line is written anywhere in the
-# image, so a developer without dotfiles gets the binary on PATH and the
-# default shell prompt.
+# The starship binary ships but no `starship init` line is written: shell
+# ergonomics are a personal-dotfiles concern (ADR-0010).
 
-# chezmoi installed system-wide at /usr/local/bin (ADR-0005, ADR-0009): its
-# generated installer targets ~/.local when chezmoi is not already on PATH,
-# which creates ~/.local, which chezmoi then prompts about with no TTY.
-# -b overrides that default so the trap never has a chance to trigger.
+# chezmoi system-wide at /usr/local/bin (ADR-0005, ADR-0009). -b overrides
+# the installer's ~/.local default, which would prompt with no TTY.
 RUN curl -fsSL get.chezmoi.io | sh -s -- -b /usr/local/bin
 
 # dotfiles-bootstrap is the one thing every consumer calls (ADR-0007): it
-# takes the dotfiles repository from the environment and never bakes one
-# in, since a shared image carries no one's configuration (ADR-0001).
+# reads the dotfiles repo from the environment, never bakes one in (ADR-0001).
 COPY dotfiles-bootstrap /usr/local/bin/dotfiles-bootstrap
 RUN chmod 0755 /usr/local/bin/dotfiles-bootstrap
 
-# The remaining tools every consumer previously installed by hand (issue
-# #7): gh, vim and bubblewrap all ship in Debian's own repository. gnupg is
-# installed here too, not because any of those three need it, but to verify
-# Claude Code's signing key below. bubblewrap is not optional - Claude
-# Code's sandbox mode needs it, and it was missing despite appearing in the
-# common-utils package list (ADR-0005).
+# gh, vim, bubblewrap ship in Debian's repository (issue #7). gnupg is here
+# to verify Claude Code's signing key below. bubblewrap is required by
+# Claude Code's sandbox mode and was missing from common-utils (ADR-0005).
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         bubblewrap \
@@ -112,20 +90,13 @@ RUN apt-get update \
         vim \
     && rm -rf /var/lib/apt/lists/*
 
-# dive has no Debian package. It ships as a Homebrew formula rather than a
-# hand-rolled GitHub-release install, so it rides the same brew install
-# above as starship - see that block's comment for why root can run it and
-# why the prefix ends up vscode-owned.
+# dive has no Debian package; it rides the same brew install as starship.
 
-# Claude Code installs from its official signed apt repository, `stable`
-# channel: the native installer manages ~/.local/bin/claude into
-# ~/.local/share/claude/versions/, writing into the one directory this
-# image must leave alone, and Homebrew can't stand in either, since
-# `claude-code` is a cask and Homebrew on Linux doesn't support casks. apt
-# installations don't auto-update, which is correct behaviour for a
-# versioned base image - a rebuild refreshes it. The downloaded key's
-# fingerprint is checked against the one Anthropic publishes before
-# anything is installed with it.
+# Claude Code from its official signed apt repository, `stable` channel: the
+# native installer writes into ~/.local, the one directory this image must
+# leave alone, and `claude-code` is a Homebrew cask (unsupported on Linux).
+# apt installs don't auto-update, correct for a versioned base image. The
+# key's fingerprint is checked against Anthropic's published one first.
 RUN install -d -m 0755 /etc/apt/keyrings \
     && curl -fsSL https://downloads.claude.ai/keys/claude-code.asc \
         -o /etc/apt/keyrings/claude-code.asc \
@@ -139,21 +110,11 @@ RUN install -d -m 0755 /etc/apt/keyrings \
     && rm -rf /var/lib/apt/lists/* /root/.gnupg
 
 # vscode, not root, is this image's default (issue #17): a plain `docker run`
-# or an agent using the image directly, rather than through `devcontainer
-# up`, would otherwise land as root, which is the state Claude Code rejects
-# `--dangerously-skip-permissions` in. vscode itself doesn't exist yet at
-# this point in the build - the common-utils feature below creates it - so
-# this is a forward reference. It resolves correctly: the devcontainer CLI
-# reads this Containerfile's own final USER before applying any feature,
-# carries it through the feature-install layers (which still run as root,
-# since installers like this one need it) as the generated wrapper
-# Dockerfile's `_DEV_CONTAINERS_IMAGE_USER` build arg, and restores it as
-# the very last instruction. Confirmed on a scratch devcontainer.json/
-# Containerfile pair built with `devcontainer build` and inspected via
-# `docker inspect --format '{{.Config.User}}'`, not assumed - ADR-0014's
-# similar claim, that a build-time USER instruction doesn't survive feature
-# application, does not hold here. A Containerfile that builds FROM this
-# image to add tools inherits vscode as its default user too, and must
-# `USER root` before `apt-get` - the standard devcontainer pattern, but a
-# behavior change for anyone already building on top.
+# would otherwise land as root, which Claude Code rejects for
+# `--dangerously-skip-permissions`. vscode doesn't exist yet here - the
+# common-utils feature creates it - but the devcontainer CLI reads this
+# final USER, carries it through the feature layers as
+# `_DEV_CONTAINERS_IMAGE_USER`, and restores it last. Confirmed by build
+# and inspect, contra ADR-0014's similar claim. A Containerfile building
+# FROM this image inherits vscode and must `USER root` before `apt-get`.
 USER vscode
