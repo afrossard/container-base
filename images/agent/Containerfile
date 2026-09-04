@@ -1,24 +1,18 @@
-# The agent runtime is a published image variant (ADR-0014), built on the
-# same published dev image every consumer builds on. release-please owns
-# this pin (ADR-0018), bumping it in step with every release rather than
-# one tag late.
+# The agent runtime is a published image variant (ADR-0014) built on the
+# published dev image. release-please owns this pin (ADR-0018).
 # x-release-please-start-version
 ARG BASE_VERSION=0.4.1
 # x-release-please-end
 FROM ghcr.io/afrossard/container-base:${BASE_VERSION}-dev
 
-# The base image now defaults to vscode, not root (issue #17). This image
-# stays root throughout its own build and ships with no final USER of its
-# own, deliberately: dockerd needs root to start, and the entrypoint below
-# is what performs the actual drop to vscode at runtime, via runuser, once
-# the daemon is up - never via a baked-in USER instruction (ADR-0014).
+# The base image defaults to vscode (issue #17). This image stays root
+# through its build and ships no final USER: dockerd needs root, and the
+# entrypoint drops to vscode at runtime via runuser (ADR-0014).
 USER root
 
-# The docker-in-docker devcontainer feature (images/agent/devcontainer.json)
-# installs the engine itself - docker-ce, containerd, buildx, and iptables,
-# including its own iptables-legacy/nft alternative selection - so this
-# Containerfile only adds tini, which the feature doesn't carry and which
-# the entrypoint below needs as PID 1 to reap dockerd's orphaned children.
+# The docker-in-docker feature (images/agent/devcontainer.json) installs the
+# engine; this Containerfile only adds tini, which the entrypoint needs as
+# PID 1 to reap dockerd's orphaned children.
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
     && rm -rf /var/lib/apt/lists/*
@@ -26,8 +20,7 @@ RUN apt-get update \
 COPY entrypoint /usr/local/bin/agent-entrypoint
 RUN chmod 0755 /usr/local/bin/agent-entrypoint
 
-# tini as PID 1 reaps dockerd's children; the entrypoint script delegates
-# dockerd's own startup to the feature's docker-init.sh and drops the given
-# command to a non-root user (docs/research/0022's "drop the sleep infinity
-# fallback" still applies - no default command).
+# tini as PID 1 reaps dockerd's children; the entrypoint delegates dockerd
+# startup to the feature's docker-init.sh and drops the command to non-root.
+# No default command (docs/research/0022).
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint"]

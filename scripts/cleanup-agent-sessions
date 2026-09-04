@@ -48,7 +48,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-# After the parse loop, so --help still works on a machine with neither.
+# After the parse loop, so --help works without them.
 require_tools msb git
 
 if [ -n "$target_name" ]; then
@@ -98,8 +98,7 @@ fi
 while IFS= read -r name; do
   [ -z "$name" ] && continue
   msb rm -f "$name"
-  # Best-effort: DOCKER_DATA_VOLUME may have been overridden away from the
-  # default at launch time, in which case there's nothing named this to
-  # remove, and that's fine.
+  # Best-effort: DOCKER_DATA_VOLUME may have been overridden at launch, so
+  # this name may not exist.
   msb volume remove "${name}-docker-data" >/dev/null 2>&1 || true
 done <<<"$targets"

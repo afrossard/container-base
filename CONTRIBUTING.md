@@ -33,9 +33,7 @@ Merging a release-please PR publishes both image variants at the new version; se
 ### Never snooze a closed release-please PR
 
 release-please reuses one fixed branch (`release-please--branches--main`) for its release PR across every cycle.
-`autorelease: snooze` is release-please's own (undocumented) convention for telling it "don't recreate this closed PR" - but attaching it triggers a confirmed, unfixed upstream bug: [googleapis/release-please#2566](https://github.com/googleapis/release-please/issues/2566).
-On its next run, release-please tries to update the snoozed PR in place, that update path can only reuse an _open_ PR, so it silently opens a new one instead - then still tries to reopen the original closed PR, which GitHub rejects because the branch already has the fresh PR open.
-The whole action call crashes at that point, before it labels the new PR `autorelease: pending`, which means the _following_ run finds nothing to tag and silently skips the release entirely.
+`autorelease: snooze` tells release-please not to recreate a closed PR, but it triggers a confirmed, unfixed upstream bug ([googleapis/release-please#2566](https://github.com/googleapis/release-please/issues/2566)): the next run crashes before labelling the new PR `autorelease: pending`, so the following run finds nothing to tag and skips the release entirely.
 
 If a release-please PR needs abandoning:
 
@@ -46,12 +44,11 @@ If a release-please PR needs abandoning:
 
 Renovate opens PRs for third-party dependency bumps; `renovate.json` sets `semanticCommits: "enabled"` and titles them accordingly, but only some of them should release.
 
-A **shipped dependency** (CONTEXT.md) is a third-party artifact baked into a published image - concretely, everything Renovate manages under `images/**`.
-Bumping one changes what a consumer pulls, so it computes a release automatically: `fix(deps): ...` for a patch/minor bump, `feat(deps): ...` for a major, as the automated floor.
-Everything else Renovate touches - GitHub Actions, npm tooling, the `.devcontainer` dogfood pin - titles as `chore(deps): ...`: no release, correctly, because none of it ships.
+A **shipped dependency** (CONTEXT.md) is a third-party artifact baked into a published image - everything Renovate manages under `images/**`.
+Bumping one changes what a consumer pulls, so it computes a release: `fix(deps): ...` for patch/minor, `feat(deps): ...` for major, as the automated floor.
+Everything else Renovate touches - GitHub Actions, npm tooling, the `.devcontainer` dogfood pin - titles as `chore(deps): ...`: no release, because none of it ships.
 
-Renovate reverts a hand-edited PR title back to its own generated one the next time it touches the branch, so an escalation never happens by editing the PR title.
-It happens in the squash commit subject at merge time instead - Renovate can never emit a breaking marker itself (Conventional Commits puts `!` between scope and colon; `semanticCommitType` is only the bare type word).
+Renovate reverts a hand-edited PR title to its own generated one, so an escalation happens in the squash commit subject at merge time instead - Renovate can never emit a breaking marker itself (`semanticCommitType` is only the bare type word).
 
 **Merge procedure**, for a human or an agent asked to review and merge a Renovate PR:
 

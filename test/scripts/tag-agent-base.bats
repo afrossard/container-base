@@ -1,10 +1,9 @@
 #!/usr/bin/env bats
 #
 # Tests for .github/scripts/tag-agent-base.sh, which parses the agent
-# Containerfile's `ARG BASE_VERSION=` line and retags a source image as
-# the pinned base agent-image.yml builds FROM (ADR-0018). A stub `docker`
-# earlier on PATH records the arguments it would have received, so this
-# stays fast and needs no daemon.
+# Containerfile's `ARG BASE_VERSION=` line and retags a source image as the
+# pinned base agent-image.yml builds FROM (ADR-0018). A stub `docker` on
+# PATH records the arguments it would have received.
 
 setup() {
   stub_dir="$BATS_TEST_TMPDIR/bin"

@@ -6,10 +6,8 @@ set -eu
 [ -n "${DOTFILES_REPO:-}" ] || { echo "dotfiles-bootstrap: DOTFILES_REPO unset, nothing to do"; exit 0; }
 
 if [ -d "$HOME/.local/share/chezmoi/.git" ]; then
-  # warm: `init --apply` does not pull once the source directory already
-  # exists, so a start that only ran init would never see a new upstream
-  # commit (ADR-0009). --force recovers a $HOME that drifted since the
-  # last apply instead of wedging on the next start.
+  # warm: `init --apply` won't pull once the source dir exists (ADR-0009).
+  # --force recovers a drifted $HOME instead of wedging on the next start.
   chezmoi update --apply --force
 else
   chezmoi init --apply --force "$DOTFILES_REPO"

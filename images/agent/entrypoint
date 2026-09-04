@@ -1,81 +1,52 @@
 #!/bin/sh
-# dockerd is this runtime's own daemon, not the host's socket bridged in
-# (ADR-0013). Its startup (wait-for-socket, cgroup v2 nesting, iptables
-# alternative selection, containerd wiring) is delegated to docker-init.sh,
-# installed by the docker-in-docker feature (images/agent/devcontainer.json)
-# rather than reimplemented here.
+# dockerd is this runtime's own daemon, not the host's (ADR-0013). Its
+# startup is delegated to docker-init.sh, installed by the docker-in-docker
+# feature (images/agent/devcontainer.json).
 set -eu
 
-# No default command (ADR-0013): the container's lifetime is the task's
-# lifetime, so a missing command is an error rather than a fallback to a
-# standing process like `sleep infinity`. Checked before handing off to
-# docker-init.sh so a missing command fails fast, without waiting on dockerd.
+# No default command (ADR-0013): a missing command is an error, not a
+# fallback to `sleep infinity`. Checked before docker-init.sh so it fails
+# fast, without waiting on dockerd.
 if [ "$#" -eq 0 ]; then
   echo "agent-entrypoint: no command given; the agent runtime has no default command" >&2
   exit 1
 fi
 
-# The engine's version is a property of this image, not something a session
-# may change (ADR-0014: the image is the guest). Without this hold, a plain
-# `apt-get upgrade` inside a live guest breaks `docker run` for the rest of
-# the boot (issue #66): dpkg replaces containerd-shim-runc-v2 on disk, but
-# nothing here can restart the containerd docker-init.sh is about to start,
-# so the old daemon then forks the new shim and fails to parse its start
-# response - surfacing as the unrecognizable "failed to create TTRPC
-# connection: unsupported protocol: Yunix". Renovate owns the bump at build
-# time instead. The cost is that a session cannot pick up a docker security
-# update in place, which is the right trade for a runtime that is discarded
-# at the end of the session.
+# Hold the engine version (ADR-0014: the image is the guest). Without it, a
+# plain `apt-get upgrade` in a live guest replaces containerd-shim-runc-v2
+# and breaks `docker run` for the rest of the boot (issue #66: the old
+# daemon forks the new shim and fails with "failed to create TTRPC
+# connection: unsupported protocol: Yunix"). Renovate owns the bump at
+# build time.
 #
-# This is here rather than in the Containerfile because `devcontainer build`
-# builds the Containerfile *first* and applies the features on top of the
-# result, so at Containerfile time the engine does not exist yet - the hold
-# fails on an unknown package, and a hold that did somehow land would block
-# the feature's own install a moment later. Runtime is the first point where
-# the packages are guaranteed present, and it is still before any command
-# the session runs. Only the apt-managed engine is named: the feature
-# installs buildx and compose as downloaded binaries under
-# /usr/libexec/docker/cli-plugins, not as packages.
+# Here rather than the Containerfile because `devcontainer build` runs the
+# Containerfile first and applies features after, so the engine packages
+# don't exist yet at Containerfile time. Only the apt-managed engine is
+# named; buildx and compose are downloaded binaries, not packages.
 apt-mark hold docker-ce docker-ce-cli containerd.io >/dev/null
 
-# docker-init.sh's cgroup v2 nesting step (vendored from Moby's own
-# hack/dind) moves every PID already in the root cgroup into a child
-# cgroup, one write() per PID; Moby's own comment already calls a failed
-# move "ignored" (the exit code is `|| :`-masked upstream), but the write
-# failure itself still prints. Under a real nested container that list is
-# just this container's own 1-2 processes, so the move succeeds silently;
-# under a microsandbox guest, the root cgroup also holds msb's own
-# supervisor processes, most of which legitimately can't move, printing
-# one harmless "echo: write error: Invalid argument" line per PID that
-# fails. Traced directly (`sh -x`) rather than assumed - no upstream fix
-# exists for the noise, only for the (already-handled) exit code.
+# docker-init.sh's cgroup v2 nesting step moves every PID in the root
+# cgroup into a child, one write() per PID. Under a microsandbox guest the
+# root cgroup also holds msb's supervisor processes, which can't move,
+# printing one harmless "echo: write error: Invalid argument" per failure.
+# Upstream masks the exit code but not the print.
 #
-# Giving docker-init.sh "true" instead of the real command makes it run
-# its full setup, confirm dockerd is up, exec into "true", and return -
-# letting the one known noisy line be filtered out of its stderr before
-# the real command's own output starts. The log lives under /var/log, not
-# /tmp: docker-init.sh's own setup remounts /tmp as a fresh tmpfs when it
-# isn't already a mountpoint (true under a plain `docker run`, false under
-# msb, where /tmp is already one) - a file written to the old /tmp before
-# that remount is unreachable by path afterward, found by testing this
-# under plain docker after already trusting the msb-only verification.
+# Giving docker-init.sh "true" runs its full setup, confirms dockerd is up,
+# and returns, so the noisy line can be filtered from its stderr first. The
+# log is under /var/log, not /tmp: docker-init.sh remounts /tmp as a fresh
+# tmpfs when it isn't already a mountpoint (true under plain `docker run`),
+# orphaning anything written to the old /tmp.
 /usr/local/share/docker-init.sh true 2>/var/log/docker-init.stderr.log
 grep -v '^echo: write error: Invalid argument$' /var/log/docker-init.stderr.log >&2 || true
 
-# A mounted volume (scripts/launch-agent-runtime's --persist-claude-auth,
-# for one) lands owned by root regardless of what owns it on the host -
-# verified directly, not assumed: a host-backed path this script's own
-# invoking user owned still showed up root:root inside the guest. vscode
-# can't write to it without this, so it's fixed up here, the one place
-# with root access after mounts attach but before privilege drops - a
-# no-op, harmlessly, if nothing is mounted. ~/.claude.json isn't a mount
-# of its own (issue #54: workspace-init symlinks it into ~/.claude, as
-# vscode, after this runs), so it's not listed here.
+# A mounted volume (e.g. --persist-claude-auth's) lands owned by root
+# regardless of host ownership. Fixed up here, the one place with root
+# access after mounts attach but before the privilege drop; a no-op if
+# nothing is mounted. ~/.claude.json is symlinked in later by
+# workspace-init as vscode (issue #54), so it's not listed.
 chown -R vscode:vscode /home/vscode/.claude 2>/dev/null || true
 
-# dockerd itself runs as root; the given command drops to vscode via
-# runuser, since the feature already put vscode in the docker group at
-# build time. PATH is vscode's plain environment, not the zshenv-sourced
-# login-shell one (runuser -u doesn't run a login shell); a task needing
-# mise/Homebrew tools invokes them itself.
+# dockerd runs as root; the command drops to vscode via runuser (the
+# feature put vscode in the docker group at build time). PATH is vscode's
+# plain environment, not the zshenv-sourced login-shell one.
 exec runuser -u vscode -- "$@"
