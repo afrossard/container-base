@@ -1,7 +1,7 @@
 # The agent runtime is a published image variant (ADR-0014) built on the
 # published dev image. release-please owns this pin (ADR-0018).
 # x-release-please-start-version
-ARG BASE_VERSION=0.4.1
+ARG BASE_VERSION=0.4.2
 # x-release-please-end
 FROM ghcr.io/afrossard/container-base:${BASE_VERSION}-dev
 
