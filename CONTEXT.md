@@ -52,9 +52,13 @@ It is a recipe for reproducing a dev environment a trusted human works in, not a
 _Avoid_: hardened image - what hardening a consumer wants is launch-time configuration it composes, not a separate published image (ADR-0011).
 
 **Agent runtime**:
-The disposable virtual machine an autonomous agent executes inside and cannot leave, holding one repo and its own docker daemon and nothing else.
-One exists per agent session, and the repo is its boundary (ADR-0013).
+The long-lived virtual machine an autonomous agent executes inside and cannot leave, holding one repo and its own docker daemon and nothing else.
+One exists per repo and hosts many agent sessions over its life; the repo is its boundary, stopping it merely pauses it, and only a reset ends it (ADR-0013, ADR-0021).
 _Avoid_: agent sandbox, agent container - the first is the agent CLI's own in-process confinement (mechanism 7 of the issue #16 survey), a layer inside the runtime; the second denies the hypervisor boundary that is the whole point.
+
+**Reset**:
+Deliberately destroying an agent runtime and everything it accumulated: tooling, configuration, memory, and unpushed work alike (ADR-0021).
+It is always an explicit, confirmed act, never a launch's default behaviour.
 
 **Agent image**:
 The published `{version}-agent` image (`images/agent/`): the dev image plus a docker daemon of its own and an entrypoint that starts it before handing off to the launcher's command, no dev layer added.
@@ -62,20 +66,24 @@ It is the artifact a per-container-VM tool boots directly as a VM guest (ADR-001
 _Avoid_: agent runtime - that names the running VM this image becomes once launched, not the artifact GHCR holds.
 
 **Launcher**:
-`scripts/launch-agent-runtime`, the host-side script that boots the agent image as a microsandbox guest: a disk-backed `/var/lib/docker` volume (msb's default nests overlayfs on overlayfs, which fails a real build), `--secret` credential injection, and a repo-derived session name that replaces its own prior sandbox.
-When given no command it supplies an interactive shell with a real tty, so a bare invocation behaves like `docker run -it`.
-It also composes what the image deliberately does not carry: the workspace clone, the `dotfiles-bootstrap` run (ADR-0016), and the repository-scoped push credential (ADR-0015).
-`scripts/cleanup-agent-sessions` removes stopped sessions and their volumes.
+`scripts/launch-agent-runtime`, the host-side script that owns the agent runtime's lifecycle: by default it attaches to the repo's existing runtime, resuming it if stopped and creating it only if absent, and it resets one only on an explicit, confirmed flag (ADR-0021).
+It composes what the image deliberately does not carry: the disk-backed `/var/lib/docker` volume (msb's default nests overlayfs on overlayfs, which fails a real build), the workspace clone, and the `dotfiles-bootstrap` run (ADR-0016).
+When given no command it supplies an interactive shell with a real tty, so a bare invocation behaves like opening a devcontainer.
+`scripts/cleanup-agent-sessions` removes only what it is explicitly told to - under ADR-0021 a stopped runtime is a normal state, not litter.
 Both are host-side tooling, not images - a narrow, documented exception to this repo's image-only scope (ADR-0001, ADR-0014).
 
 **Agent session**:
-One unit of autonomous agent work, bounded by the lifetime of the agent runtime it runs in.
-Disposing of the runtime ends the session and everything it accumulated, apart from what was pushed to the remote.
+One agent's continuous engagement, wherever it runs: on the host, inside an agent runtime, or spawned by another agent.
+Its lifetime is uncorrelated with any runtime's - a runtime hosts many sessions, concurrent and successive, over its life (ADR-0021).
 
-**Session tooling**:
-The tools an agent session installs inside the runtime for its own workflow, at the session's cadence rather than the image's.
-It is never baked, because its update cadence outruns image releases; the image carries only what is stable across sessions.
-_Avoid_: agent tooling - too easily read as the tooling that runs the agent (the image, the launcher), rather than what the session installs for itself.
+**Runtime tooling**:
+The tools installed inside an agent runtime for its workflows, at the runtime's cadence rather than the image's.
+It is never baked, because its update cadence outruns image releases; the image carries only what is stable across runtimes, and a reset removes it until a tooling recipe reapplies it.
+_Avoid_: session tooling - the former name, from when tooling died with a session (ADR-0021); agent tooling - too easily read as the tooling that runs the agent (the image, the launcher).
+
+**Tooling recipe**:
+The versioned configuration files and provisioning skill that make a freshly created agent runtime ready for one workflow stack, applied by an agent rather than a fixed script so upstream drift is adapted to instead of crashed into.
+`tooling/` holds them, a documented exception to this repo's image-only scope, like the launcher (ADR-0001, ADR-0021).
 
 **Workspace**:
 The clone of one repo an agent session works in, made inside the agent runtime at launch and destroyed with it.
