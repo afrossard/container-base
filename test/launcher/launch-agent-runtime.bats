@@ -3,23 +3,23 @@
 # Argument-assembly tests for scripts/launch-agent-runtime: a stub `msb`
 # earlier on PATH records the assembled command line and exits.
 #
-# The stub records one argument per line, never "$*", so a scope that
+# The stub records one argument per line, never "$*", so a value that
 # word-split into two arguments fails here rather than reading identically
 # in a flattened string. A stub cannot check whether msb honours what it
-# was handed; that is live-checked separately (issues #77, #87).
+# was handed; that is live-checked separately.
 
 setup() {
   stub_dir="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$stub_dir"
   export MSB_ARGS_FILE="$BATS_TEST_TMPDIR/msb-args"
-  # The stub records the GH_TOKEN it inherits, so a launcher that stopped
-  # exporting a stdin-supplied token is noticed even though the forwarded
-  # name still looks right.
-  export MSB_ENV_FILE="$BATS_TEST_TMPDIR/msb-env"
+  export MSB_START_FILE="$BATS_TEST_TMPDIR/msb-start"
+  export MSB_EXEC_FILE="$BATS_TEST_TMPDIR/msb-exec"
 
-  # --github-token needs a variable that is set; the value is irrelevant
-  # here since only the stubbed msb resolves it.
-  export GH_TOKEN="not-a-real-token"
+  # Runtime state the stub answers `list` from: names in STUB_ALL exist,
+  # names also in STUB_RUNNING are running. Empty by default, so the common
+  # case is "no runtime yet" and the launcher takes its create path.
+  export STUB_ALL=""
+  export STUB_RUNNING=""
 
   # The launcher must not call jq (issue #83). Exit 127 alone isn't enough:
   # sandbox_is_running runs as `... || return 0`, which suppresses set -e,
@@ -32,19 +32,43 @@ exit 127
 STUB
   chmod +x "$stub_dir/jq"
 
-  # Answers just enough for the launcher to reach its final `exec msb run`:
-  # no sandbox exists, every volume already exists, `run` records its args.
+  # A state-driven stub: `list` answers from STUB_ALL/STUB_RUNNING, and
+  # each lifecycle subcommand records what it was handed so a test can
+  # assert which one the launcher chose (create / resume / attach).
   cat > "$stub_dir/msb" <<'STUB'
 #!/usr/bin/env bash
 case "$1" in
-  list) ;;
+  list)
+    want=all
+    for a in "$@"; do
+      case "$a" in
+        --running) want=running ;;
+        --stopped) want=stopped ;;
+      esac
+    done
+    for n in $STUB_ALL; do
+      case " $STUB_RUNNING " in
+        *" $n "*) [ "$want" = stopped ] || printf '%s\n' "$n" ;;
+        *) [ "$want" = running ] || printf '%s\n' "$n" ;;
+      esac
+    done
+    ;;
   volume)
     # Succeeding means ensure_volume never calls create.
     exit 0
     ;;
+  start)
+    printf '%s\n' "$@" >> "$MSB_START_FILE"
+    exit 0
+    ;;
+  exec)
+    # Both the agent-bringup call and the shell/command call land here,
+    # appended so a test can assert on either.
+    printf '%s\n' "$@" >> "$MSB_EXEC_FILE"
+    exit 0
+    ;;
   run)
     printf '%s\n' "$@" > "$MSB_ARGS_FILE"
-    printf '%s' "$GH_TOKEN" > "$MSB_ENV_FILE"
     exit 0
     ;;
   *)
@@ -58,8 +82,8 @@ STUB
   export PATH="$stub_dir:$PATH"
 }
 
-# Explicit --name skips sandbox resolution, --clone-url skips the remote
-# lookup, and a COMMAND keeps --persist-claude-auth (and its mount) off.
+# Explicit --name skips sandbox resolution and --clone-url skips the remote
+# lookup, so each test drives only the assembly it cares about.
 launch() {
   "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" \
     --name test-session \
@@ -78,160 +102,47 @@ has_flag_value() {
   grep -A1 -Fx -- "$1" "$MSB_ARGS_FILE" | grep -Fxq -- "$2"
 }
 
-@test "--github-token expands to the two-host scope gh and git both need" {
-  run launch --github-token GH_TOKEN
-  [ "$status" -eq 0 ]
-  has_flag_value "--secret" "GH_TOKEN@github.com,api.github.com"
-}
+# --- generic secret passthrough (kept; the GitHub specialisation is not) ---
 
-# github.com alone leaves `gh` on an out-of-scope api.github.com (issue #77).
-@test "--github-token never scopes the token to github.com alone" {
-  run launch --github-token GH_TOKEN
-  [ "$status" -eq 0 ]
-  ! has_arg "GH_TOKEN@github.com"
-}
-
-@test "--github-token applies the recommended violation action by default" {
-  run launch --github-token GH_TOKEN
-  [ "$status" -eq 0 ]
-  has_flag_value "--on-secret-violation" "block-and-log"
-}
-
-@test "an explicit --on-secret-violation wins over the default" {
-  run launch --github-token GH_TOKEN --on-secret-violation passthrough
-  [ "$status" -eq 0 ]
-  has_flag_value "--on-secret-violation" "passthrough"
-  ! has_arg "block-and-log"
-}
-
-@test "the flag order does not decide which violation action wins" {
-  run launch --on-secret-violation passthrough --github-token GH_TOKEN
-  [ "$status" -eq 0 ]
-  has_flag_value "--on-secret-violation" "passthrough"
-  ! has_arg "block-and-log"
-}
-
-@test "--github-token composes with a hand-written --secret" {
-  run launch --github-token GH_TOKEN --secret OTHER@example.com
-  [ "$status" -eq 0 ]
-  has_flag_value "--secret" "GH_TOKEN@github.com,api.github.com"
-  has_flag_value "--secret" "OTHER@example.com"
-}
-
-# `--github-token "$GH_TOKEN"` would put the token in argv. Tokens are
-# identifier-shaped, so being an unset variable is what gives them away.
-@test "a literal token value is rejected rather than forwarded" {
-  run launch --github-token "ghp_thisisnotarealtokenvalue123456789"
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"not a token value"* || "$output" == *"not the token value"* ]]
-  [ ! -f "$MSB_ARGS_FILE" ]
-}
-
-# An error message is one more place a real token could end up.
-@test "the rejection never echoes back what it rejected" {
-  run launch --github-token "ghp_thisisnotarealtokenvalue123456789"
-  [ "$status" -ne 0 ]
-  [[ "$output" != *"ghp_thisisnotarealtokenvalue123456789"* ]]
-}
-
-@test "--github-token naming an unset variable fails at launch, not in the guest" {
-  unset UNSET_TOKEN_VAR
-  run launch --github-token UNSET_TOKEN_VAR
-  [ "$status" -ne 0 ]
-  [ ! -f "$MSB_ARGS_FILE" ]
-}
-
-@test "--github-token with an empty value is rejected, not silently ignored" {
-  run launch --github-token ""
-  [ "$status" -ne 0 ]
-  [ ! -f "$MSB_ARGS_FILE" ]
-}
-
-# The violation default belongs to --github-token alone and must not leak
-# onto plain --secret launches.
-@test "a plain --secret launch is left exactly as it was" {
+@test "a plain --secret is forwarded to msb run unchanged" {
   run launch --secret OTHER@example.com
   [ "$status" -eq 0 ]
   has_flag_value "--secret" "OTHER@example.com"
+}
+
+@test "--secret alone adds no --on-secret-violation of its own" {
+  run launch --secret OTHER@example.com
+  [ "$status" -eq 0 ]
   ! has_arg "--on-secret-violation"
 }
 
-# Only the non-tty half is testable here; the prompt branch needs a real
-# terminal and is checked live instead.
-@test "--github-token - reads the token from stdin and forwards a name" {
-  run launch --github-token - <<< "piped-token-value"
+@test "an explicit --on-secret-violation is forwarded verbatim" {
+  run launch --secret OTHER@example.com --on-secret-violation block-and-terminate
   [ "$status" -eq 0 ]
-  has_flag_value "--secret" "GH_TOKEN@github.com,api.github.com"
+  has_flag_value "--on-secret-violation" "block-and-terminate"
 }
 
-# The value must never reach the command line, where `ps` would show it.
-@test "a piped token never appears in the msb command line" {
-  run launch --github-token - <<< "piped-token-value"
-  [ "$status" -eq 0 ]
-  ! grep -q "piped-token-value" "$MSB_ARGS_FILE"
+# --- flags removed with the disposable model get no special handling; they
+#     fall to the generic unknown-argument path. --github-token and
+#     --persist-claude-auth are retired (ADR-0022); --force skipped the
+#     replace confirmation that no longer exists, and returns with the reset
+#     path (issue #146). ---
+
+@test "the removed flags are rejected as unknown arguments" {
+  for flag in --github-token --persist-claude-auth --no-persist-claude-auth --force; do
+    run launch "$flag"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"unrecognized argument"* ]]
+    [ ! -f "$MSB_ARGS_FILE" ]
+  done
 }
 
-@test "--github-token - still applies the recommended violation action" {
-  run launch --github-token - <<< "piped-token-value"
+@test "the create path carries no ~/.claude volume or PERSIST_CLAUDE_AUTH env" {
+  run launch
   [ "$status" -eq 0 ]
-  has_flag_value "--on-secret-violation" "block-and-log"
-}
-
-# `read` returns non-zero at EOF on input with no trailing newline (a
-# password-manager pipe), which under `set -e` would kill the script.
-@test "a piped token without a trailing newline still works" {
-  run launch --github-token - < <(printf 'no-trailing-newline')
-  [ "$status" -eq 0 ]
-  has_flag_value "--secret" "GH_TOKEN@github.com,api.github.com"
-}
-
-@test "--github-token - with nothing on stdin fails before launching" {
-  run launch --github-token - < /dev/null
-  [ "$status" -ne 0 ]
-  [ ! -f "$MSB_ARGS_FILE" ]
-}
-
-# msb resolves the forwarded name against the launcher's environment, so a
-# stdin-supplied token must be exported there. GH_TOKEN is unset first, or
-# setup()'s export would mask a launcher that stopped exporting.
-@test "a stdin-supplied token reaches the environment msb inherits" {
-  unset GH_TOKEN
-  run launch --github-token - <<< "piped-token-value"
-  [ "$status" -eq 0 ]
-  [ "$(cat "$MSB_ENV_FILE")" = "piped-token-value" ]
-}
-
-# A CRLF-piped or space-padded token would otherwise be forwarded intact
-# and rejected inside the guest (issue #77).
-@test "a piped token loses a trailing carriage return and surrounding spaces" {
-  unset GH_TOKEN
-  run launch --github-token - < <(printf ' goodtoken \r\n')
-  [ "$status" -eq 0 ]
-  [ "$(cat "$MSB_ENV_FILE")" = "goodtoken" ]
-}
-
-# "A second one replaces the first" has to hold across the two forms, not
-# just within each.
-@test "a later --github-token name replaces an earlier -" {
-  export NAMED_TOKEN_VAR="named-value"
-  run launch --github-token - --github-token NAMED_TOKEN_VAR <<< "piped-token-value"
-  [ "$status" -eq 0 ]
-  has_flag_value "--secret" "NAMED_TOKEN_VAR@github.com,api.github.com"
-  ! has_arg "GH_TOKEN@github.com,api.github.com"
-}
-
-@test "a later --github-token - replaces an earlier name" {
-  export NAMED_TOKEN_VAR="named-value"
-  run launch --github-token NAMED_TOKEN_VAR --github-token - <<< "piped-token-value"
-  [ "$status" -eq 0 ]
-  has_flag_value "--secret" "GH_TOKEN@github.com,api.github.com"
-  ! has_arg "NAMED_TOKEN_VAR@github.com,api.github.com"
-}
-
-@test "--github-token - is not mistaken for a variable named -" {
-  run launch --github-token - <<< "piped-token-value"
-  [ "$status" -eq 0 ]
-  ! has_arg "-@github.com,api.github.com"
+  ! grep -q "/home/vscode/.claude" "$MSB_ARGS_FILE"
+  ! grep -q "agent-claude-creds" "$MSB_ARGS_FILE"
+  ! grep -q "PERSIST_CLAUDE_AUTH" "$MSB_ARGS_FILE"
 }
 
 # The sandbox lookup is the path that used jq (issue #83), so a launch that
@@ -243,9 +154,70 @@ has_flag_value() {
   [ ! -f "$JQ_CALLED_FILE" ]
 }
 
-@test "--github-token is documented in --help" {
-  run "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" --help
+# --- runtime lifecycle: which subcommand for which state (issue #144) ---
+#
+# The bare launch attaches to a running runtime, resumes a stopped one, and
+# creates one only when none exists - never `msb run --replace`.
+
+@test "no runtime for the repo: the launcher creates one with 'msb run'" {
+  run launch
   [ "$status" -eq 0 ]
-  [[ "$output" == *"--github-token"* ]]
-  [[ "$output" == *"api.github.com"* ]]
+  [ -f "$MSB_ARGS_FILE" ]
+  [ ! -f "$MSB_START_FILE" ]
+  [ ! -f "$MSB_EXEC_FILE" ]
+}
+
+@test "a stopped runtime: the launcher resumes with 'msb start' then attaches, never 'msb run'" {
+  export STUB_ALL="test-session"
+  run launch
+  [ "$status" -eq 0 ]
+  grep -Fxq "test-session" "$MSB_START_FILE"
+  [ -f "$MSB_EXEC_FILE" ]
+  [ ! -f "$MSB_ARGS_FILE" ]
+}
+
+@test "a running runtime: the launcher attaches with 'msb exec' only, never 'msb start' or 'msb run'" {
+  export STUB_ALL="test-session" STUB_RUNNING="test-session"
+  run launch
+  [ "$status" -eq 0 ]
+  [ -f "$MSB_EXEC_FILE" ]
+  [ ! -f "$MSB_START_FILE" ]
+  [ ! -f "$MSB_ARGS_FILE" ]
+}
+
+@test "attach converges the runtime with agent-bringup before handing over" {
+  export STUB_ALL="test-session" STUB_RUNNING="test-session"
+  run launch
+  [ "$status" -eq 0 ]
+  grep -Fxq "agent-bringup" "$MSB_EXEC_FILE"
+}
+
+@test "attach runs the command as the vscode user in the workspace directory" {
+  export STUB_ALL="test-session" STUB_RUNNING="test-session"
+  run launch
+  [ "$status" -eq 0 ]
+  grep -A1 -Fx -- "-u" "$MSB_EXEC_FILE" | grep -Fxq -- "vscode"
+  grep -A1 -Fx -- "-w" "$MSB_EXEC_FILE" | grep -Fxq -- "/home/vscode/repo"
+}
+
+@test "the create path no longer replaces a runtime or registers a boot script" {
+  run launch
+  [ "$status" -eq 0 ]
+  ! has_arg "--replace"
+  ! has_arg "--script-path"
+  ! grep -q "workspace-init" "$MSB_ARGS_FILE"
+}
+
+@test "the create path passes the command straight through, unwrapped" {
+  run launch
+  [ "$status" -eq 0 ]
+  # `-- true`, not `-- workspace-init true`.
+  grep -A1 -Fx -- "--" "$MSB_ARGS_FILE" | grep -Fxq -- "true"
+}
+
+@test "the create path still forwards the clone URL and dotfiles repo as env" {
+  run launch
+  [ "$status" -eq 0 ]
+  has_flag_value "--env" "WORKSPACE_CLONE_URL=https://example.invalid/repo.git"
+  has_arg "--env"
 }

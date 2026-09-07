@@ -17,8 +17,15 @@ RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
     && rm -rf /var/lib/apt/lists/*
 
+# agent-entrypoint runs on the first boot; agent-bringup is its convergence
+# step (docker daemon, dotfiles, workspace clone), re-run by the launcher
+# over `msb exec` on every later attach since `msb start` re-runs nothing
+# (issue #144). ensure-workspace is agent-bringup's clone-or-reuse step,
+# split out so it is testable on its own.
 COPY entrypoint /usr/local/bin/agent-entrypoint
-RUN chmod 0755 /usr/local/bin/agent-entrypoint
+COPY bringup /usr/local/bin/agent-bringup
+COPY ensure-workspace /usr/local/bin/ensure-workspace
+RUN chmod 0755 /usr/local/bin/agent-entrypoint /usr/local/bin/agent-bringup /usr/local/bin/ensure-workspace
 
 # tini as PID 1 reaps dockerd's children; the entrypoint delegates dockerd
 # startup to the feature's docker-init.sh and drops the command to non-root.

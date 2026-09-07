@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # Removes stopped agent-runtime sandboxes for this repo (or, with --name,
 # one specific sandbox) along with each one's paired
-# <session-name>-docker-data volume. Never touches CLAUDE_AUTH_VOLUME
-# (default: agent-claude-creds), which is shared across sessions - remove
-# it by hand with `msb volume remove` if needed.
+# <session-name>-docker-data volume.
 #
 # Usage:
 #   scripts/cleanup-agent-sessions [--name SESSION] [--dry-run] [--force]
