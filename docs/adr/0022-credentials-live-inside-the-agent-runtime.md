@@ -3,7 +3,7 @@
 With the runtime long-lived (ADR-0021), both pieces of launch-time credential machinery lost their footing, and both are retired: the operator logs in to Claude Code and GitHub interactively inside the runtime, once per reset.
 
 **`--persist-claude-auth` is retired because its job disappeared.**
-The `agent-claude-creds` volume, the `~/.claude.json` symlink in `workspace-init`, and the flag pair existed only to carry a login across disposable launches; a long-lived runtime keeps `~/.claude` on its own disk.
+The `agent-claude-creds` volume, the `~/.claude.json` symlink, and the flag pair existed only to carry a login across disposable launches; a long-lived runtime keeps `~/.claude` on its own disk.
 Retiring it also removes a real credential sitting as a plainly readable file under `~/.microsandbox/volumes/` on the host.
 
 **`--github-token` is retired despite its job remaining.**

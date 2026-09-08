@@ -1,0 +1,45 @@
+#!/bin/sh
+# Converges an agent runtime to a working state: docker daemon up, the
+# operator's dotfiles applied, the workspace clone present. Idempotent and
+# safe to re-run.
+#
+# `msb start` re-runs neither the image entrypoint nor any registered boot
+# script (verified on issue #144), so this is the runtime's single
+# convergence point: the entrypoint runs it on the first boot, and the
+# launcher re-runs it over `msb exec` on every later attach - running,
+# resumed, or fresh - the devcontainer post-start shape. The launcher stays
+# agnostic of what this does.
+set -eu
+
+runtime_user=vscode
+
+# 1. Docker daemon. dockerd is this runtime's own (ADR-0013) and nothing
+#    restarts it after `msb start`, so bring it up whenever it is down.
+#    docker-init.sh is idempotent (verified on #144); only its cgroup-v2
+#    nesting step is noisy - it moves every PID in the root cgroup one
+#    write() at a time, and msb's own supervisor PIDs there can't move,
+#    printing one "echo: write error: Invalid argument" per failure.
+if ! docker info >/dev/null 2>&1; then
+  # Hold the engine version (ADR-0014: the image is the guest). Without it a
+  # plain `apt-get upgrade` in a live guest swaps containerd-shim-runc-v2
+  # and breaks `docker run` for the rest of the boot (issue #66). The hold
+  # is on disk and survives a resume, but reasserting it costs nothing.
+  apt-mark hold docker-ce docker-ce-cli containerd.io >/dev/null
+
+  # Giving docker-init.sh "true" runs its full setup, confirms dockerd is
+  # up, and returns. The log is under /var/log, not /tmp: docker-init.sh
+  # remounts /tmp as a fresh tmpfs when it isn't already a mountpoint.
+  /usr/local/share/docker-init.sh true 2>/var/log/docker-init.stderr.log
+  grep -v '^echo: write error: Invalid argument$' \
+    /var/log/docker-init.stderr.log >&2 || true
+fi
+
+# 2. Dotfiles bootstrap (ADR-0016): idempotent, and a no-op with
+#    DOTFILES_REPO unset. Runs on every attach so dotfile updates still
+#    reach a long-lived runtime.
+runuser -u "$runtime_user" -- dotfiles-bootstrap
+
+# 3. Workspace clone: present after the first boot, so a no-op on a resume,
+#    and a no-op with WORKSPACE_CLONE_URL unset (a bare `docker run` of the
+#    image, as the agent image test suite does).
+runuser -u "$runtime_user" -- ensure-workspace

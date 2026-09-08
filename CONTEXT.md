@@ -86,8 +86,8 @@ The versioned configuration files and provisioning skill that make a freshly cre
 `tooling/` holds them, a documented exception to this repo's image-only scope, like the launcher (ADR-0001, ADR-0021).
 
 **Workspace**:
-The clone of one repo an agent session works in, made inside the agent runtime at launch and destroyed with it.
-It enters as a full clone and leaves as a pushed branch, sharing nothing with the operator's own checkout (ADR-0015).
+The clone of one repo an agent session works in, made inside the agent runtime when the runtime is first created and kept across every later attach; a reset is what destroys it.
+It enters as a full clone and leaves as a pushed branch, sharing nothing with the operator's own checkout (ADR-0015, ADR-0021).
 _Avoid_: checkout, mount - the first names the human's copy on the host, the second names a mechanism this repo rejected because a writable shared path is a channel out of the runtime.
 
 **Isolation substrate**:

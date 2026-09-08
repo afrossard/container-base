@@ -1,52 +1,31 @@
 #!/bin/sh
-# dockerd is this runtime's own daemon, not the host's (ADR-0013). Its
-# startup is delegated to docker-init.sh, installed by the docker-in-docker
-# feature (images/agent/devcontainer.json).
+# First-boot entry for the agent runtime (ADR-0014). Converges the runtime
+# via agent-bringup, then hands the launcher's command to the non-root
+# working user in the workspace directory.
+#
+# `msb start` re-runs none of this on a resume (issue #144); the launcher
+# re-runs agent-bringup over `msb exec` instead.
 set -eu
 
+runtime_user=vscode
+
 # No default command (ADR-0013): a missing command is an error, not a
-# fallback to `sleep infinity`. Checked before docker-init.sh so it fails
-# fast, without waiting on dockerd.
+# fallback to `sleep infinity`. Checked first so it fails fast.
 if [ "$#" -eq 0 ]; then
   echo "agent-entrypoint: no command given; the agent runtime has no default command" >&2
   exit 1
 fi
 
-# Hold the engine version (ADR-0014: the image is the guest). Without it, a
-# plain `apt-get upgrade` in a live guest replaces containerd-shim-runc-v2
-# and breaks `docker run` for the rest of the boot (issue #66: the old
-# daemon forks the new shim and fails with "failed to create TTRPC
-# connection: unsupported protocol: Yunix"). Renovate owns the bump at
-# build time.
-#
-# Here rather than the Containerfile because `devcontainer build` runs the
-# Containerfile first and applies features after, so the engine packages
-# don't exist yet at Containerfile time. Only the apt-managed engine is
-# named; buildx and compose are downloaded binaries, not packages.
-apt-mark hold docker-ce docker-ce-cli containerd.io >/dev/null
+# Converge: docker daemon, dotfiles bootstrap, workspace clone.
+agent-bringup
 
-# docker-init.sh's cgroup v2 nesting step moves every PID in the root
-# cgroup into a child, one write() per PID. Under a microsandbox guest the
-# root cgroup also holds msb's supervisor processes, which can't move,
-# printing one harmless "echo: write error: Invalid argument" per failure.
-# Upstream masks the exit code but not the print.
-#
-# Giving docker-init.sh "true" runs its full setup, confirms dockerd is up,
-# and returns, so the noisy line can be filtered from its stderr first. The
-# log is under /var/log, not /tmp: docker-init.sh remounts /tmp as a fresh
-# tmpfs when it isn't already a mountpoint (true under plain `docker run`),
-# orphaning anything written to the old /tmp.
-/usr/local/share/docker-init.sh true 2>/var/log/docker-init.stderr.log
-grep -v '^echo: write error: Invalid argument$' /var/log/docker-init.stderr.log >&2 || true
+# Hand off from inside the workspace, as the working user. agent-bringup has
+# just ensured the clone exists; fall back to the home directory if no
+# workspace URL was configured.
+repo_dir="/home/$runtime_user"
+if [ -n "${WORKSPACE_CLONE_URL:-}" ]; then
+  repo_dir="/home/$runtime_user/$(basename "$WORKSPACE_CLONE_URL" .git)"
+fi
+cd "$repo_dir"
 
-# A mounted volume (e.g. --persist-claude-auth's) lands owned by root
-# regardless of host ownership. Fixed up here, the one place with root
-# access after mounts attach but before the privilege drop; a no-op if
-# nothing is mounted. ~/.claude.json is symlinked in later by
-# workspace-init as vscode (issue #54), so it's not listed.
-chown -R vscode:vscode /home/vscode/.claude 2>/dev/null || true
-
-# dockerd runs as root; the command drops to vscode via runuser (the
-# feature put vscode in the docker group at build time). PATH is vscode's
-# plain environment, not the zshenv-sourced login-shell one.
-exec runuser -u vscode -- "$@"
+exec runuser -u "$runtime_user" -- "$@"
