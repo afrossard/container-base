@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0](https://github.com/afrossard/container-base/compare/0.4.2...1.0.0) (2026-09-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* launch-agent-runtime no longer accepts `--github-token`, `--persist-claude-auth` / `--no-persist-claude-auth`, or `--force`. Authenticate `gh` and `git` inside the runtime; the Claude Code login now persists on the runtime's own disk across stop/start with no flag or volume (ADR-0022). A bare launch never destroys a runtime, so `--force` had nothing left to skip; it returns with `--reset` (issue #146). The generic `--secret` / `--on-secret-violation` passthrough is unchanged.
+
+### Features
+
+* a bare launch resumes the agent runtime; retire launch-time credential flags ([#151](https://github.com/afrossard/container-base/issues/151)) ([58241a6](https://github.com/afrossard/container-base/commit/58241a650617b526208bba8d276896c52b319326))
+
 ## [0.4.2](https://github.com/afrossard/container-base/compare/0.4.1...0.4.2) (2026-09-05)
 
 
