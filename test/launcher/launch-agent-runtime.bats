@@ -149,13 +149,18 @@ has_flag_value() {
 # --- reset: the one launcher path that destroys a runtime (issue #146) ---
 #
 # reset() calls the script directly: unlike launch(), it appends no
-# `-- true`, because reset never reaches command handling.
+# `-- true`, because reset never reaches command handling. reset_bare()
+# drops --name too, so it exercises reset's own runtime resolution.
 
 reset() {
   "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" \
     --name test-session \
     --clone-url https://example.invalid/repo.git \
     --reset "$@"
+}
+
+reset_bare() {
+  "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" --reset "$@"
 }
 
 @test "--reset with --force destroys the runtime and its paired docker volume, and creates nothing" {
@@ -177,12 +182,39 @@ reset() {
   grep -Fxq "custom-data-vol" "$MSB_VOLUME_FILE"
 }
 
-@test "--reset against a repo with no runtime removes nothing and says so" {
+@test "--reset --name for a runtime that does not exist removes nothing and says so" {
   export STUB_ALL=""
   run reset --force
   [ "$status" -ne 0 ]
-  [[ "$output" == *"no runtime"* ]]
+  [[ "$output" == *"no runtime named 'test-session'"* ]]
   [ ! -f "$MSB_RM_FILE" ]
+}
+
+@test "a bare --reset with no runtime for the repo removes nothing and says so" {
+  export STUB_ALL=""
+  run reset_bare --force
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no runtime for"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+# reset targets this repo's runtime directly - it must never fall through
+# to the attach picker's "start a new one" branch.
+@test "a bare --reset with several matching runtimes refuses and asks for --name" {
+  export STUB_ALL="one two"
+  run reset_bare --force
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"pass --name"* ]]
+  [[ "$output" != *"start a new one"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+@test "a bare --reset with exactly one matching runtime destroys it" {
+  export STUB_ALL="solo"
+  run reset_bare --force
+  [ "$status" -eq 0 ]
+  grep -Fxq "solo" "$MSB_RM_FILE"
+  grep -Fxq "solo-docker-data" "$MSB_VOLUME_FILE"
 }
 
 @test "--reset without --force refuses when stdin isn't a terminal, and removes nothing" {
@@ -210,8 +242,7 @@ reset() {
 @test "the usage text names reset as the only destruction path" {
   run "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" --help
   [ "$status" -eq 0 ]
-  [[ "$output" == *"--reset"* ]]
-  [[ "$output" == *"only"* ]]
+  [[ "$output" == *"--reset is the only path that destroys a runtime"* ]]
 }
 
 @test "the create path carries no ~/.claude volume or PERSIST_CLAUDE_AUTH env" {

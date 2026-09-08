@@ -72,8 +72,9 @@ cleanup() {
 @test "the usage text names an explicitly-named runtime as the only thing it removes" {
   run cleanup --help
   [ "$status" -eq 0 ]
-  [[ "$output" == *"--name"* ]]
-  [[ "$output" == *"only"* ]]
+  [[ "$output" == *"--name is required"* ]]
+  [[ "$output" == *"only destruction path"* ]]
+  [[ "$output" == *"launch-agent-runtime --reset"* ]]
 }
 
 @test "a running sandbox is not removed without --force" {

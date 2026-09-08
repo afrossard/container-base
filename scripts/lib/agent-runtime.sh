@@ -65,13 +65,41 @@ ensure_volume() {
   msb volume inspect "$name" >/dev/null 2>&1 || msb volume create --name "$name" "$@"
 }
 
+# Interactive "[y/N]" gate shared by every destructive host command. A
+# no-op when $2 ("$force") is "1". Aborts the whole script (exit 1) on a
+# non-terminal stdin or on any answer other than y/Y. $1 is the prompt
+# string; messages are prefixed with $0's basename.
+confirm_or_die() {
+  local prompt="$1" force="$2" who reply
+  who=$(basename "$0")
+  [ "$force" = "1" ] && return 0
+  if [ ! -t 0 ]; then
+    echo "$who: stdin isn't a terminal to confirm on; pass --force to skip the prompt" >&2
+    exit 1
+  fi
+  read -r -p "$prompt" reply
+  case "$reply" in
+    y | Y) return 0 ;;
+    *)
+      echo "$who: aborted" >&2
+      exit 1
+      ;;
+  esac
+}
+
 # Destroys a sandbox and its paired docker-data volume - the single
 # mechanism behind the launcher's --reset and cleanup-agent-sessions
 # (ADR-0021). $2 overrides the volume name for a launch that set
-# DOCKER_DATA_VOLUME; its removal is best-effort because that override
-# means the default name may never have existed.
+# DOCKER_DATA_VOLUME; when it names no existing volume (the common case
+# for cleanup, which cannot see that override) removal is simply skipped,
+# but a volume that exists and then fails to remove is reported, not
+# swallowed.
 remove_runtime() {
-  local name="$1" volume="${2:-${1}-docker-data}"
+  local name="$1" volume="${2:-${1}-docker-data}" who
+  who=$(basename "$0")
   msb rm -f "$name"
-  msb volume remove "$volume" >/dev/null 2>&1 || true
+  if msb volume inspect "$volume" >/dev/null 2>&1; then
+    msb volume remove "$volume" >/dev/null 2>&1 \
+      || echo "$who: could not remove docker volume '$volume'; remove it by hand with 'msb volume remove $volume'" >&2
+  fi
 }

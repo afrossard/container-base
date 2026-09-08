@@ -211,14 +211,27 @@ if [ "$force" = "1" ] && [ "$reset" != "1" ]; then
   exit 1
 fi
 
-# The one destruction path (ADR-0021). Resolves the same runtime a bare
-# launch would act on, refuses if there is nothing to reset, confirms
-# unless --force, then removes the runtime and its paired docker volume.
+# The one destruction path (ADR-0021). Targets this repo's runtime
+# directly - not the attach picker, which offers "start a new one" and has
+# no meaning here - refuses if there is nothing or more than one thing to
+# reset, confirms unless --force, then removes the runtime and its paired
+# docker volume.
 if [ "$reset" = "1" ]; then
   if [ -z "$name" ]; then
-    name=$(resolve_name)
-  fi
-  if ! sandbox_exists "$name"; then
+    reset_base=$(repo_name)
+    reset_matches=$(matching_sandboxes "$reset_base")
+    reset_count=$(printf '%s' "$reset_matches" | grep -c . || true)
+    if [ "$reset_count" -eq 0 ]; then
+      echo "launch-agent-runtime: no runtime for '$reset_base' to reset" >&2
+      exit 1
+    fi
+    if [ "$reset_count" -gt 1 ]; then
+      echo "launch-agent-runtime: several runtimes match '$reset_base'; pass --name to choose which to reset:" >&2
+      printf '%s\n' "$reset_matches" | awk -F'\t' '{print "  " $1 " (" $2 ")"}' >&2
+      exit 1
+    fi
+    name=$(printf '%s' "$reset_matches" | cut -f1)
+  elif ! sandbox_exists "$name"; then
     echo "launch-agent-runtime: no runtime named '$name' to reset" >&2
     exit 1
   fi
@@ -227,20 +240,7 @@ if [ "$reset" = "1" ]; then
   echo "launch-agent-runtime: reset destroys runtime '$name' and its docker volume '$reset_volume'." >&2
   echo "launch-agent-runtime: everything it accumulated - tooling, configuration, logins, unpushed work - goes with it (ADR-0021)." >&2
 
-  if [ "$force" != "1" ]; then
-    if [ ! -t 0 ]; then
-      echo "launch-agent-runtime: stdin isn't a terminal to confirm on; pass --force to reset without asking" >&2
-      exit 1
-    fi
-    read -r -p "Reset '$name'? [y/N] " confirm
-    case "$confirm" in
-      y | Y) ;;
-      *)
-        echo "launch-agent-runtime: reset aborted" >&2
-        exit 1
-        ;;
-    esac
-  fi
+  confirm_or_die "Reset '$name'? [y/N] " "$force"
 
   remove_runtime "$name" "$reset_volume"
   echo "launch-agent-runtime: reset complete; the next launch creates a fresh runtime" >&2

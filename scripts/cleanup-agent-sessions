@@ -76,20 +76,6 @@ if [ "$dry_run" = "1" ]; then
   exit 0
 fi
 
-if [ "$force" != "1" ]; then
-  if [ ! -t 0 ]; then
-    echo "cleanup-agent-sessions: stdin isn't a terminal to confirm on; pass --force to remove without asking" >&2
-    exit 1
-  fi
-
-  read -r -p "Remove '$target_name' and its volume? [y/N] " confirm
-  case "$confirm" in
-    y | Y) ;;
-    *)
-      echo "cleanup-agent-sessions: aborted" >&2
-      exit 1
-      ;;
-  esac
-fi
+confirm_or_die "Remove '$target_name' and its volume? [y/N] " "$force"
 
 remove_runtime "$target_name"
