@@ -64,3 +64,14 @@ ensure_volume() {
   shift
   msb volume inspect "$name" >/dev/null 2>&1 || msb volume create --name "$name" "$@"
 }
+
+# Destroys a sandbox and its paired docker-data volume - the single
+# mechanism behind the launcher's --reset and cleanup-agent-sessions
+# (ADR-0021). $2 overrides the volume name for a launch that set
+# DOCKER_DATA_VOLUME; its removal is best-effort because that override
+# means the default name may never have existed.
+remove_runtime() {
+  local name="$1" volume="${2:-${1}-docker-data}"
+  msb rm -f "$name"
+  msb volume remove "$volume" >/dev/null 2>&1 || true
+}

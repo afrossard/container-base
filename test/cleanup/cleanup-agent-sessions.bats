@@ -58,6 +58,24 @@ cleanup() {
   "$BATS_TEST_DIRNAME/../../scripts/cleanup-agent-sessions" "$@"
 }
 
+# Under the pet model (ADR-0021) a stopped runtime is a normal state, not
+# litter - so a bare invocation has nothing to collect and must say why
+# rather than sweep every stopped sandbox for the repo (issue #146).
+@test "invoked bare, it removes nothing and explains why" {
+  export STUB_ALL="alpha beta" STUB_RUNNING=""
+  run cleanup
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"--name"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+@test "the usage text names an explicitly-named runtime as the only thing it removes" {
+  run cleanup --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--name"* ]]
+  [[ "$output" == *"only"* ]]
+}
+
 @test "a running sandbox is not removed without --force" {
   export STUB_ALL="alpha" STUB_RUNNING="alpha"
   run cleanup --name alpha

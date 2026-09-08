@@ -6,6 +6,7 @@
 #   scripts/launch-agent-runtime [--name NAME] [--image REF] \
 #     [--clone-url URL] [--secret ENV@HOST]... [--on-secret-violation ACTION] \
 #     [--memory SIZE] [--cpus N] [--max-memory SIZE] [-- COMMAND...]
+#   scripts/launch-agent-runtime --reset [--name NAME] [--force]
 #
 # A bare launch attaches to this repo's agent runtime, resuming it if
 # stopped and creating one only if none exists - it never destroys one.
@@ -13,6 +14,17 @@
 # dotfiles, workspace clone) and then hands over as the working user in the
 # workspace directory.
 #
+# --reset is the only path that destroys a runtime: it removes the runtime
+# and its paired docker storage volume, taking everything the runtime
+# accumulated - tooling, configuration, logins, unpushed work - with it
+# (ADR-0021). It prompts for confirmation unless --force is given. The next
+# launch then creates a fresh runtime.
+#
+#   --reset             destroy this repo's runtime and its docker volume,
+#                        after a confirmation prompt; the only destruction
+#                        path
+#   --force             with --reset, skip the confirmation prompt (for
+#                        scripted resets); invalid on its own
 #   --name NAME          runtime name (default: <repo>-sandbox). Attaches to
 #                        a matching runtime by its `repo=<repo>` label,
 #                        resuming it if stopped; prompts if more than one
@@ -54,6 +66,8 @@ version="1.0.0" # x-release-please-version
 image="ghcr.io/afrossard/container-base:${version}-agent"
 name=""
 clone_url=""
+reset=0
+force=0
 secrets=()
 violation_flag=()
 memory="4G"
@@ -164,6 +178,14 @@ while [ "$#" -gt 0 ]; do
       clone_url="$2"
       shift 2
       ;;
+    --reset)
+      reset=1
+      shift
+      ;;
+    --force)
+      force=1
+      shift
+      ;;
     --)
       shift
       break
@@ -182,6 +204,48 @@ done
 
 # After the parse loop, so --help works without them.
 require_tools msb git
+
+if [ "$force" = "1" ] && [ "$reset" != "1" ]; then
+  echo "launch-agent-runtime: --force only applies to --reset" >&2
+  usage
+  exit 1
+fi
+
+# The one destruction path (ADR-0021). Resolves the same runtime a bare
+# launch would act on, refuses if there is nothing to reset, confirms
+# unless --force, then removes the runtime and its paired docker volume.
+if [ "$reset" = "1" ]; then
+  if [ -z "$name" ]; then
+    name=$(resolve_name)
+  fi
+  if ! sandbox_exists "$name"; then
+    echo "launch-agent-runtime: no runtime named '$name' to reset" >&2
+    exit 1
+  fi
+
+  reset_volume="${DOCKER_DATA_VOLUME:-${name}-docker-data}"
+  echo "launch-agent-runtime: reset destroys runtime '$name' and its docker volume '$reset_volume'." >&2
+  echo "launch-agent-runtime: everything it accumulated - tooling, configuration, logins, unpushed work - goes with it (ADR-0021)." >&2
+
+  if [ "$force" != "1" ]; then
+    if [ ! -t 0 ]; then
+      echo "launch-agent-runtime: stdin isn't a terminal to confirm on; pass --force to reset without asking" >&2
+      exit 1
+    fi
+    read -r -p "Reset '$name'? [y/N] " confirm
+    case "$confirm" in
+      y | Y) ;;
+      *)
+        echo "launch-agent-runtime: reset aborted" >&2
+        exit 1
+        ;;
+    esac
+  fi
+
+  remove_runtime "$name" "$reset_volume"
+  echo "launch-agent-runtime: reset complete; the next launch creates a fresh runtime" >&2
+  exit 0
+fi
 
 if [ -z "$clone_url" ]; then
   if ! clone_url=$(repo_url); then

@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# Removes stopped agent-runtime sandboxes for this repo (or, with --name,
-# one specific sandbox) along with each one's paired
-# <session-name>-docker-data volume.
+# Removes one explicitly named agent-runtime sandbox and its paired
+# <name>-docker-data volume.
 #
 # Usage:
-#   scripts/cleanup-agent-sessions [--name SESSION] [--dry-run] [--force]
+#   scripts/cleanup-agent-sessions --name SESSION [--dry-run] [--force]
 #
-#   --name SESSION   remove only this one sandbox and its volume, running
-#                    or not (running requires --force too)
+# Under the pet model (ADR-0021) a stopped runtime is a normal state, not
+# litter, so --name is required and there is no bulk sweep. Destroying this
+# repo's runtime is otherwise the launcher's job: the only destruction path
+# is `launch-agent-runtime --reset`, which also removes the docker volume.
+#
+#   --name SESSION   the only thing this removes: this one sandbox and its
+#                    volume, running or not (running requires --force too)
 #   --dry-run        list what would be removed, without removing anything
 #   --force          skip the confirmation prompt; also required to
-#                    remove a running --name sandbox
+#                    remove a running sandbox
 
 set -eo pipefail
 
@@ -49,28 +53,23 @@ done
 # After the parse loop, so --help works without them.
 require_tools msb git
 
-if [ -n "$target_name" ]; then
-  if ! sandbox_exists "$target_name"; then
-    echo "cleanup-agent-sessions: no sandbox named '$target_name'" >&2
-    exit 1
-  fi
-  if sandbox_is_running "$target_name" && [ "$force" != "1" ]; then
-    echo "cleanup-agent-sessions: '$target_name' is currently running; pass --force to remove it anyway" >&2
-    exit 1
-  fi
-  targets="$target_name"
-else
-  repo=$(repo_name)
-  targets=$(msb list --label "repo=$repo" --stopped -q 2>/dev/null || true)
-
-  if [ -z "$targets" ]; then
-    echo "cleanup-agent-sessions: no stopped sandboxes for '$repo'" >&2
-    exit 0
-  fi
+if [ -z "$target_name" ]; then
+  echo "cleanup-agent-sessions: name the runtime to remove with --name SESSION." >&2
+  echo "cleanup-agent-sessions: a stopped runtime is a normal state under the pet model (ADR-0021), not litter - there is no bulk cleanup. To destroy this repo's runtime, use 'launch-agent-runtime --reset'." >&2
+  exit 1
 fi
 
-echo "cleanup-agent-sessions: sandbox(es) to remove:" >&2
-printf '%s\n' "$targets" | sed 's/^/  /' >&2
+if ! sandbox_exists "$target_name"; then
+  echo "cleanup-agent-sessions: no sandbox named '$target_name'" >&2
+  exit 1
+fi
+if sandbox_is_running "$target_name" && [ "$force" != "1" ]; then
+  echo "cleanup-agent-sessions: '$target_name' is currently running; pass --force to remove it anyway" >&2
+  exit 1
+fi
+
+echo "cleanup-agent-sessions: sandbox to remove:" >&2
+printf '  %s\n' "$target_name" >&2
 
 if [ "$dry_run" = "1" ]; then
   echo "cleanup-agent-sessions: --dry-run, nothing removed" >&2
@@ -83,7 +82,7 @@ if [ "$force" != "1" ]; then
     exit 1
   fi
 
-  read -r -p "Remove these and their volumes? [y/N] " confirm
+  read -r -p "Remove '$target_name' and its volume? [y/N] " confirm
   case "$confirm" in
     y | Y) ;;
     *)
@@ -93,10 +92,4 @@ if [ "$force" != "1" ]; then
   esac
 fi
 
-while IFS= read -r name; do
-  [ -z "$name" ] && continue
-  msb rm -f "$name"
-  # Best-effort: DOCKER_DATA_VOLUME may have been overridden at launch, so
-  # this name may not exist.
-  msb volume remove "${name}-docker-data" >/dev/null 2>&1 || true
-done <<<"$targets"
+remove_runtime "$target_name"

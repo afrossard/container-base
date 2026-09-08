@@ -14,6 +14,8 @@ setup() {
   export MSB_ARGS_FILE="$BATS_TEST_TMPDIR/msb-args"
   export MSB_START_FILE="$BATS_TEST_TMPDIR/msb-start"
   export MSB_EXEC_FILE="$BATS_TEST_TMPDIR/msb-exec"
+  export MSB_RM_FILE="$BATS_TEST_TMPDIR/msb-rm"
+  export MSB_VOLUME_FILE="$BATS_TEST_TMPDIR/msb-volume"
 
   # Runtime state the stub answers `list` from: names in STUB_ALL exist,
   # names also in STUB_RUNNING are running. Empty by default, so the common
@@ -54,7 +56,14 @@ case "$1" in
     done
     ;;
   volume)
-    # Succeeding means ensure_volume never calls create.
+    # Records the call ("$2" is the verb: inspect / create / remove), then
+    # succeeds - a successful `volume inspect` means ensure_volume never
+    # calls create.
+    printf '%s\n' "$@" >> "$MSB_VOLUME_FILE"
+    exit 0
+    ;;
+  rm)
+    printf '%s\n' "$@" >> "$MSB_RM_FILE"
     exit 0
     ;;
   start)
@@ -124,17 +133,85 @@ has_flag_value() {
 
 # --- flags removed with the disposable model get no special handling; they
 #     fall to the generic unknown-argument path. --github-token and
-#     --persist-claude-auth are retired (ADR-0022); --force skipped the
-#     replace confirmation that no longer exists, and returns with the reset
-#     path (issue #146). ---
+#     --persist-claude-auth are retired (ADR-0022). --force is no longer
+#     retired: it is the reset path's confirmation override (issue #146),
+#     tested below. ---
 
-@test "the removed flags are rejected as unknown arguments" {
-  for flag in --github-token --persist-claude-auth --no-persist-claude-auth --force; do
+@test "the removed credential flags are rejected as unknown arguments" {
+  for flag in --github-token --persist-claude-auth --no-persist-claude-auth; do
     run launch "$flag"
     [ "$status" -ne 0 ]
     [[ "$output" == *"unrecognized argument"* ]]
     [ ! -f "$MSB_ARGS_FILE" ]
   done
+}
+
+# --- reset: the one launcher path that destroys a runtime (issue #146) ---
+#
+# reset() calls the script directly: unlike launch(), it appends no
+# `-- true`, because reset never reaches command handling.
+
+reset() {
+  "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" \
+    --name test-session \
+    --clone-url https://example.invalid/repo.git \
+    --reset "$@"
+}
+
+@test "--reset with --force destroys the runtime and its paired docker volume, and creates nothing" {
+  export STUB_ALL="test-session"
+  run reset --force
+  [ "$status" -eq 0 ]
+  grep -Fxq "test-session" "$MSB_RM_FILE"
+  grep -Fxq "remove" "$MSB_VOLUME_FILE"
+  grep -Fxq "test-session-docker-data" "$MSB_VOLUME_FILE"
+  [ ! -f "$MSB_ARGS_FILE" ]
+  [ ! -f "$MSB_START_FILE" ]
+}
+
+@test "--reset honours DOCKER_DATA_VOLUME when removing the paired volume" {
+  export STUB_ALL="test-session"
+  export DOCKER_DATA_VOLUME="custom-data-vol"
+  run reset --force
+  [ "$status" -eq 0 ]
+  grep -Fxq "custom-data-vol" "$MSB_VOLUME_FILE"
+}
+
+@test "--reset against a repo with no runtime removes nothing and says so" {
+  export STUB_ALL=""
+  run reset --force
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no runtime"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+@test "--reset without --force refuses when stdin isn't a terminal, and removes nothing" {
+  export STUB_ALL="test-session"
+  run reset
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"terminal"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+@test "--force without --reset is rejected" {
+  run launch --force
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"--force only applies to --reset"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+@test "no bare launch path removes a runtime" {
+  export STUB_ALL="test-session" STUB_RUNNING="test-session"
+  run launch
+  [ "$status" -eq 0 ]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+@test "the usage text names reset as the only destruction path" {
+  run "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--reset"* ]]
+  [[ "$output" == *"only"* ]]
 }
 
 @test "the create path carries no ~/.claude volume or PERSIST_CLAUDE_AUTH env" {
