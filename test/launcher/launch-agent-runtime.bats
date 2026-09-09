@@ -115,14 +115,6 @@ reset_bare() {
   [ ! -f "$MSB_START_FILE" ]
 }
 
-@test "--reset honours DOCKER_DATA_VOLUME when removing the paired volume" {
-  export STUB_ALL="test-session"
-  export DOCKER_DATA_VOLUME="custom-data-vol"
-  run reset --force
-  [ "$status" -eq 0 ]
-  grep -Fxq "custom-data-vol" "$MSB_VOLUME_FILE"
-}
-
 @test "--reset --name for a runtime that does not exist removes nothing and says so" {
   export STUB_ALL=""
   run reset --force

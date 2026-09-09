@@ -121,15 +121,14 @@ confirm_or_die() {
   esac
 }
 
-# Destroys a sandbox and its paired docker-data volume - the single
-# mechanism behind the launcher's --reset and cleanup-agent-sessions
-# (ADR-0021). $2 overrides the volume name for a launch that set
-# DOCKER_DATA_VOLUME; when it names no existing volume (the common case
-# for cleanup, which cannot see that override) removal is simply skipped,
-# but a volume that exists and then fails to remove is reported, not
-# swallowed.
+# Destroys a sandbox and its paired docker volume - the single mechanism
+# behind the launcher's --reset and cleanup-agent-sessions (ADR-0021).
+# The volume name is always <name>-docker-data, derived from the runtime
+# name, so both callers agree on it without extra state. An absent volume
+# is skipped quietly; one that exists and then fails to remove is
+# reported, not swallowed.
 remove_runtime() {
-  local name="$1" volume="${2:-${1}-docker-data}" who
+  local name="$1" volume="${1}-docker-data" who
   who=$(basename "$0")
   msb rm -f "$name"
   if msb volume inspect "$volume" >/dev/null 2>&1; then

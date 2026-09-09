@@ -48,10 +48,14 @@
 # With no COMMAND, opens an interactive shell; with one, runs it
 # non-interactively. Both attach as the working user in the workspace.
 #
+# Each runtime gets a disk-backed /var/lib/docker volume named
+# <runtime name>-docker-data - derived from the name, so --reset and
+# cleanup-agent-sessions can always find it. Pre-create it yourself to
+# control its placement; otherwise the launcher creates it.
+#
 # Environment:
-#   DOCKER_DATA_VOLUME   /var/lib/docker volume name
-#                        (default: <runtime name>-docker-data)
-#   DOCKER_DATA_SIZE     size of that volume (default: 20G)
+#   DOCKER_DATA_SIZE     size of that volume when the launcher creates it
+#                        (default: 20G)
 
 # Not -u: bash 3.2 (macOS) treats "${secrets[@]}" as unbound while the
 # array is still empty.
@@ -209,13 +213,12 @@ if [ "$reset" = "1" ]; then
     name=$(printf '%s' "$reset_matches" | cut -f1)
   fi
 
-  reset_volume="${DOCKER_DATA_VOLUME:-${name}-docker-data}"
-  echo "launch-agent-runtime: reset destroys runtime '$name' and its docker volume '$reset_volume'." >&2
+  echo "launch-agent-runtime: reset destroys runtime '$name' and its docker volume '${name}-docker-data'." >&2
   echo "launch-agent-runtime: everything it accumulated - tooling, configuration, logins, unpushed work - goes with it (ADR-0021)." >&2
 
   confirm_or_die "Reset '$name'? [y/N] " "$force"
 
-  remove_runtime "$name" "$reset_volume"
+  remove_runtime "$name"
   echo "launch-agent-runtime: reset complete; the next launch creates a fresh runtime" >&2
   exit 0
 fi
@@ -282,9 +285,9 @@ fi
 
 echo "launch-agent-runtime: no runtime for this repo, creating one" >&2
 
-: "${DOCKER_DATA_VOLUME:=${name}-docker-data}"
+docker_volume="${name}-docker-data"
 
-ensure_volume "$DOCKER_DATA_VOLUME" --kind disk --size "$DOCKER_DATA_SIZE"
+ensure_volume "$docker_volume" --kind disk --size "$DOCKER_DATA_SIZE"
 
 # Pins network egress explicitly: msb's implicit default reverts to no
 # egress once any --net-rule is added. A hostname allowlist was rejected -
@@ -301,7 +304,7 @@ exec msb run "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
   --net public \
   "${secrets[@]}" \
   "${violation_flag[@]}" \
-  --mount-named "${DOCKER_DATA_VOLUME}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
+  --mount-named "${docker_volume}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
   --env "WORKSPACE_CLONE_URL=${clone_url}" \
   --env "DOTFILES_REPO=${DOTFILES_REPO:-}" \
   "$image" -- "$@"
