@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Shared stub `msb` for the launcher and cleanup bats suites.
+#
+# `list` answers from STUB_ALL / STUB_RUNNING; `list --label ...` answers
+# from STUB_LABELLED when that variable is set, so a test can make a name
+# exist globally but not for the current repo. Every mutating subcommand
+# appends its arguments one per line - never "$*", so a value that
+# word-split into two arguments fails a whole-line match rather than
+# reading identically in a flattened string - to a per-test file. Each
+# file defaults to /dev/null, so a suite exports only the ones it
+# inspects. A successful `volume` (covering `volume inspect`) is what
+# stops ensure_volume from calling `volume create`.
+
+case "$1" in
+  list)
+    want=all
+    labelled=0
+    for a in "$@"; do
+      case "$a" in
+        --running) want=running ;;
+        --stopped) want=stopped ;;
+        --label) labelled=1 ;;
+      esac
+    done
+    src="$STUB_ALL"
+    if [ "$labelled" = 1 ] && [ -n "${STUB_LABELLED+x}" ]; then
+      src="$STUB_LABELLED"
+    fi
+    for n in $src; do
+      case " $STUB_RUNNING " in
+        *" $n "*) [ "$want" = stopped ] || printf '%s\n' "$n" ;;
+        *) [ "$want" = running ] || printf '%s\n' "$n" ;;
+      esac
+    done
+    ;;
+  rm) printf '%s\n' "$@" >> "${MSB_RM_FILE:-/dev/null}" ;;
+  volume) printf '%s\n' "$@" >> "${MSB_VOLUME_FILE:-/dev/null}" ;;
+  start) printf '%s\n' "$@" >> "${MSB_START_FILE:-/dev/null}" ;;
+  exec) printf '%s\n' "$@" >> "${MSB_EXEC_FILE:-/dev/null}" ;;
+  run) printf '%s\n' "$@" > "${MSB_ARGS_FILE:-/dev/null}" ;;
+  *)
+    echo "msb stub: unexpected subcommand: $1" >&2
+    exit 64
+    ;;
+esac
+exit 0

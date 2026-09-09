@@ -11,93 +11,26 @@
 setup() {
   stub_dir="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$stub_dir"
+  cp "$BATS_TEST_DIRNAME/../helpers/msb" "$BATS_TEST_DIRNAME/../helpers/jq" "$stub_dir/"
+  chmod +x "$stub_dir/msb" "$stub_dir/jq"
+  export PATH="$stub_dir:$PATH"
+
+  # The stub records one argument per line, so a value that word-split
+  # into two arguments fails a whole-line match here. Each file below is
+  # read by at least one test; see test/helpers/msb for the stub itself.
   export MSB_ARGS_FILE="$BATS_TEST_TMPDIR/msb-args"
   export MSB_START_FILE="$BATS_TEST_TMPDIR/msb-start"
   export MSB_EXEC_FILE="$BATS_TEST_TMPDIR/msb-exec"
   export MSB_RM_FILE="$BATS_TEST_TMPDIR/msb-rm"
   export MSB_VOLUME_FILE="$BATS_TEST_TMPDIR/msb-volume"
+  export JQ_CALLED_FILE="$BATS_TEST_TMPDIR/jq-called"
 
   # Runtime state the stub answers `list` from: names in STUB_ALL exist,
-  # names also in STUB_RUNNING are running. Empty by default, so the common
-  # case is "no runtime yet" and the launcher takes its create path.
+  # names also in STUB_RUNNING are running. Empty by default, so the
+  # common case is "no runtime yet" and the launcher takes its create
+  # path.
   export STUB_ALL=""
   export STUB_RUNNING=""
-
-  # The launcher must not call jq (issue #83). Exit 127 alone isn't enough:
-  # sandbox_is_running runs as `... || return 0`, which suppresses set -e,
-  # so the stub records the call and the test asserts on the recording.
-  export JQ_CALLED_FILE="$BATS_TEST_TMPDIR/jq-called"
-  cat > "$stub_dir/jq" <<'STUB'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >> "$JQ_CALLED_FILE"
-exit 127
-STUB
-  chmod +x "$stub_dir/jq"
-
-  # A state-driven stub: `list` answers from STUB_ALL/STUB_RUNNING, and
-  # each lifecycle subcommand records what it was handed so a test can
-  # assert which one the launcher chose (create / resume / attach).
-  cat > "$stub_dir/msb" <<'STUB'
-#!/usr/bin/env bash
-case "$1" in
-  list)
-    want=all
-    labelled=0
-    for a in "$@"; do
-      case "$a" in
-        --running) want=running ;;
-        --stopped) want=stopped ;;
-        --label) labelled=1 ;;
-      esac
-    done
-    # `list --label repo=<repo>` answers from STUB_LABELLED when set, so a
-    # test can make a name exist globally but not for this repo; every
-    # other `list` still answers from STUB_ALL.
-    src="$STUB_ALL"
-    if [ "$labelled" = 1 ] && [ -n "${STUB_LABELLED+x}" ]; then
-      src="$STUB_LABELLED"
-    fi
-    for n in $src; do
-      case " $STUB_RUNNING " in
-        *" $n "*) [ "$want" = stopped ] || printf '%s\n' "$n" ;;
-        *) [ "$want" = running ] || printf '%s\n' "$n" ;;
-      esac
-    done
-    ;;
-  volume)
-    # Records the call ("$2" is the verb: inspect / create / remove), then
-    # succeeds - a successful `volume inspect` means ensure_volume never
-    # calls create.
-    printf '%s\n' "$@" >> "$MSB_VOLUME_FILE"
-    exit 0
-    ;;
-  rm)
-    printf '%s\n' "$@" >> "$MSB_RM_FILE"
-    exit 0
-    ;;
-  start)
-    printf '%s\n' "$@" >> "$MSB_START_FILE"
-    exit 0
-    ;;
-  exec)
-    # Both the agent-bringup call and the shell/command call land here,
-    # appended so a test can assert on either.
-    printf '%s\n' "$@" >> "$MSB_EXEC_FILE"
-    exit 0
-    ;;
-  run)
-    printf '%s\n' "$@" > "$MSB_ARGS_FILE"
-    exit 0
-    ;;
-  *)
-    # Loud, so an unrecognized subcommand can't become a silent pass.
-    echo "msb stub: unexpected subcommand: $1" >&2
-    exit 64
-    ;;
-esac
-STUB
-  chmod +x "$stub_dir/msb"
-  export PATH="$stub_dir:$PATH"
 }
 
 # Explicit --name skips sandbox resolution and --clone-url skips the remote

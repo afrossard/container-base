@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Shared stub `jq` for the launcher and cleanup bats suites: the scripts
+# must never call jq (issue #83). Record the call and exit non-zero -
+# callers use `... || return 0`, which suppresses set -e, so a bare
+# `exit 127` would be swallowed silently. JQ_CALLED_FILE defaults to
+# /dev/null, so a suite exports it only when it asserts on the recording.
+printf '%s\n' "$*" >> "${JQ_CALLED_FILE:-/dev/null}"
+exit 127

@@ -10,57 +10,16 @@
 setup() {
   stub_dir="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$stub_dir"
-  export MSB_RM_FILE="$BATS_TEST_TMPDIR/msb-rm"
+  cp "$BATS_TEST_DIRNAME/../helpers/msb" "$BATS_TEST_DIRNAME/../helpers/jq" "$stub_dir/"
+  chmod +x "$stub_dir/msb" "$stub_dir/jq"
+  export PATH="$stub_dir:$PATH"
 
-  # A recording stub, not exit 127 alone: callers use `||`, suppressing set -e.
+  # Read by the tests below; see test/helpers/msb for the stub itself.
+  export MSB_RM_FILE="$BATS_TEST_TMPDIR/msb-rm"
   export JQ_CALLED_FILE="$BATS_TEST_TMPDIR/jq-called"
-  cat > "$stub_dir/jq" <<'STUB'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >> "$JQ_CALLED_FILE"
-exit 127
-STUB
-  chmod +x "$stub_dir/jq"
 
   export STUB_ALL=""
   export STUB_RUNNING=""
-
-  cat > "$stub_dir/msb" <<'STUB'
-#!/usr/bin/env bash
-case "$1" in
-  list)
-    want=all
-    labelled=0
-    for a in "$@"; do
-      case "$a" in
-        --running) want=running ;;
-        --stopped) want=stopped ;;
-        --label) labelled=1 ;;
-      esac
-    done
-    # `list --label repo=<repo>` answers from STUB_LABELLED when set, so a
-    # test can make a name exist globally but not for this repo.
-    src="$STUB_ALL"
-    if [ "$labelled" = 1 ] && [ -n "${STUB_LABELLED+x}" ]; then
-      src="$STUB_LABELLED"
-    fi
-    for n in $src; do
-      case " $STUB_RUNNING " in
-        *" $n "*) [ "$want" = stopped ] || printf '%s\n' "$n" ;;
-        *) [ "$want" = running ] || printf '%s\n' "$n" ;;
-      esac
-    done
-    ;;
-  rm) printf '%s\n' "$3" >> "$MSB_RM_FILE" ;;
-  volume) exit 0 ;;
-  *)
-    echo "msb stub: unexpected subcommand: $1" >&2
-    exit 64
-    ;;
-esac
-exit 0
-STUB
-  chmod +x "$stub_dir/msb"
-  export PATH="$stub_dir:$PATH"
 }
 
 cleanup() {
