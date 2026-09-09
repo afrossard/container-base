@@ -90,12 +90,13 @@ cleanup() {
   [ ! -f "$MSB_RM_FILE" ]
 }
 
-@test "the usage text describes the list default and both removal flags" {
+@test "the usage text describes the list default, both removal flags, and reset" {
   run cleanup --help
   [ "$status" -eq 0 ]
   [[ "$output" == *"list this repo's runtimes"* ]]
   [[ "$output" == *"--name SESSION"* ]]
   [[ "$output" == *"--all"* ]]
+  [[ "$output" == *"launch-agent-runtime --reset"* ]]
 }
 
 # --- --name: one runtime ---
@@ -145,6 +146,14 @@ cleanup() {
   export STUB_ALL="alpha" STUB_RUNNING=""
   run cleanup --name alpha --dry-run
   [ "$status" -eq 0 ]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+@test "--name without --force refuses on a non-terminal stdin rather than removing unprompted" {
+  export STUB_ALL="alpha" STUB_RUNNING=""
+  run cleanup --name alpha
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"terminal"* ]]
   [ ! -f "$MSB_RM_FILE" ]
 }
 

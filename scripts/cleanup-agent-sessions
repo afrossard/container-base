@@ -8,7 +8,10 @@
 #
 # With neither --name nor --all it only lists this repo's runtimes and
 # their state, removing nothing. A stopped runtime is a normal parked
-# state, so removal is never implicit: you name one, or ask for --all.
+# state, so removal is never implicit: you name one, or ask for --all. To
+# wipe this repo's runtime and start from nothing, use the launcher's one
+# destruction path, `launch-agent-runtime --reset`, which also frees the
+# paired docker volume.
 #
 #   (no args)        list this repo's runtimes, each marked running,
 #                    stopped, or unknown; remove nothing
