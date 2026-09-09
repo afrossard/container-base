@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
-# Removes one explicitly named agent-runtime sandbox and its paired
-# <name>-docker-data volume.
+# Housekeeping for this repo's agent-runtime sandboxes: list them, or
+# remove the ones you are finished with along with their paired
+# <name>-docker-data volumes.
 #
 # Usage:
-#   scripts/cleanup-agent-sessions --name SESSION [--dry-run] [--force]
+#   scripts/cleanup-agent-sessions [--name SESSION | --all] [--dry-run] [--force]
 #
-# Under the pet model (ADR-0021) a stopped runtime is a normal state, not
-# litter, so --name is required and there is no bulk sweep. Destroying this
-# repo's runtime is otherwise the launcher's job: the only destruction path
-# is `launch-agent-runtime --reset`, which also removes the docker volume.
+# With neither --name nor --all it only lists this repo's runtimes and
+# their state, removing nothing. A stopped runtime is a normal parked
+# state, so removal is never implicit: you name one, or ask for --all.
 #
-#   --name SESSION   the only thing this removes: this one sandbox and its
-#                    volume, running or not (running requires --force too)
-#   --dry-run        list what would be removed, without removing anything
-#   --force          skip the confirmation prompt; also required to
-#                    remove a running sandbox
+#   (no args)        list this repo's runtimes, each marked running or
+#                    stopped; remove nothing
+#   --name SESSION   remove this one runtime and its volume, running or
+#                    not (a running one needs --force too)
+#   --all            remove this repo's stopped runtimes and their
+#                    volumes; running ones are left alone unless --force
+#   --dry-run        list what --name / --all would remove, remove nothing
+#   --force          skip the confirmation prompt; also removes a running
+#                    runtime that --name or --all would otherwise leave
 
 set -eo pipefail
 
@@ -23,12 +27,17 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/agent-runtime.sh"
 
 dry_run=0
 force=0
+all=0
 target_name=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --name)
       target_name="$2"
       shift 2
+      ;;
+    --all)
+      all=1
+      shift
       ;;
     --dry-run)
       dry_run=1
@@ -53,29 +62,69 @@ done
 # After the parse loop, so --help works without them.
 require_tools msb git
 
-if [ -z "$target_name" ]; then
-  echo "cleanup-agent-sessions: name the runtime to remove with --name SESSION." >&2
-  echo "cleanup-agent-sessions: a stopped runtime is a normal state under the pet model (ADR-0021), not litter - there is no bulk cleanup. To destroy this repo's runtime, use 'launch-agent-runtime --reset'." >&2
+if [ -n "$target_name" ] && [ "$all" = "1" ]; then
+  echo "cleanup-agent-sessions: give --name or --all, not both" >&2
   exit 1
 fi
 
-if ! sandbox_exists "$target_name"; then
-  echo "cleanup-agent-sessions: no sandbox named '$target_name'" >&2
-  exit 1
-fi
-if sandbox_is_running "$target_name" && [ "$force" != "1" ]; then
-  echo "cleanup-agent-sessions: '$target_name' is currently running; pass --force to remove it anyway" >&2
-  exit 1
+repo=$(repo_name)
+runtimes=$(matching_sandboxes "$repo")
+
+# Bare invocation: show what exists, touch nothing.
+if [ -z "$target_name" ] && [ "$all" != "1" ]; then
+  if [ -z "$runtimes" ]; then
+    echo "cleanup-agent-sessions: no runtimes for '$repo'" >&2
+    exit 0
+  fi
+  echo "cleanup-agent-sessions: runtimes for '$repo':" >&2
+  printf '%s\n' "$runtimes" | awk -F'\t' '{ printf "  %-32s %s\n", $1, $2 }' >&2
+  echo "cleanup-agent-sessions: pass --name SESSION to remove one, or --all for every stopped runtime." >&2
+  exit 0
 fi
 
-echo "cleanup-agent-sessions: sandbox to remove:" >&2
-printf '  %s\n' "$target_name" >&2
+# Assemble the list of runtimes to remove.
+if [ -n "$target_name" ]; then
+  if ! sandbox_exists "$target_name"; then
+    echo "cleanup-agent-sessions: no runtime named '$target_name'" >&2
+    exit 1
+  fi
+  if sandbox_is_running "$target_name" && [ "$force" != "1" ]; then
+    echo "cleanup-agent-sessions: '$target_name' is currently running; pass --force to remove it anyway" >&2
+    exit 1
+  fi
+  targets="$target_name"
+else
+  if [ -z "$runtimes" ]; then
+    echo "cleanup-agent-sessions: no runtimes for '$repo'" >&2
+    exit 0
+  fi
+  if [ "$force" = "1" ]; then
+    targets=$(printf '%s\n' "$runtimes" | cut -f1)
+  else
+    targets=$(printf '%s\n' "$runtimes" | awk -F'\t' '$2 == "stopped" { print $1 }')
+    skipped=$(printf '%s\n' "$runtimes" | awk -F'\t' '$2 != "stopped" { print $1 }')
+    if [ -n "$skipped" ]; then
+      echo "cleanup-agent-sessions: leaving these running (pass --force to remove them too):" >&2
+      printf '%s\n' "$skipped" | sed 's/^/  /' >&2
+    fi
+    if [ -z "$targets" ]; then
+      echo "cleanup-agent-sessions: no stopped runtimes for '$repo'" >&2
+      exit 0
+    fi
+  fi
+fi
+
+echo "cleanup-agent-sessions: to remove, with volumes:" >&2
+printf '%s\n' "$targets" | sed 's/^/  /' >&2
 
 if [ "$dry_run" = "1" ]; then
   echo "cleanup-agent-sessions: --dry-run, nothing removed" >&2
   exit 0
 fi
 
-confirm_or_die "Remove '$target_name' and its volume? [y/N] " "$force"
+confirm_or_die "Remove the runtime(s) listed above and their volumes? [y/N] " "$force"
 
-remove_runtime "$target_name"
+while IFS= read -r name; do
+  [ -z "$name" ] && continue
+  remove_runtime "$name"
+done <<<"$targets"

@@ -57,6 +57,40 @@ sandbox_is_running() {
   contains_line "$(msb list --running -q 2>/dev/null || true)" "$1"
 }
 
+# "name<TAB>status" for sandboxes matching this repo's label plus any
+# exact-name match (pre-label sandboxes). A name in neither status list is
+# reported "unknown", not dropped. Shared by the launcher's name
+# resolution and cleanup-agent-sessions' listing.
+matching_sandboxes() {
+  local base="$1" names running stopped name status
+  running=$(msb list --running -q 2>/dev/null || true)
+  stopped=$(msb list --stopped -q 2>/dev/null || true)
+
+  names=$(
+    {
+      msb list --label "repo=$base" -q 2>/dev/null || true
+      if sandbox_exists "$base"; then printf '%s\n' "$base"; fi
+    } | sort -u
+  )
+  if [ -z "$names" ]; then
+    return 0
+  fi
+
+  while IFS= read -r name; do
+    if [ -z "$name" ]; then
+      continue
+    fi
+    if contains_line "$running" "$name"; then
+      status=running
+    elif contains_line "$stopped" "$name"; then
+      status=stopped
+    else
+      status=unknown
+    fi
+    printf '%s\t%s\n' "$name" "$status"
+  done <<<"$names"
+}
+
 # Creates a named msb volume if it doesn't already exist. Extra args pass
 # straight through to `msb volume create` (--kind, --size, ...).
 ensure_volume() {

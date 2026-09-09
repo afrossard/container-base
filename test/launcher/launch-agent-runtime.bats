@@ -239,10 +239,10 @@ reset_bare() {
   [ ! -f "$MSB_RM_FILE" ]
 }
 
-@test "the usage text names reset as the only destruction path" {
+@test "the usage text names reset as the launcher's only destruction path" {
   run "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" --help
   [ "$status" -eq 0 ]
-  [[ "$output" == *"--reset is the only path that destroys a runtime"* ]]
+  [[ "$output" == *"--reset is the only launcher path that destroys a runtime"* ]]
 }
 
 @test "the create path carries no ~/.claude volume or PERSIST_CLAUDE_AUTH env" {

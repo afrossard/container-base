@@ -14,15 +14,16 @@
 # dotfiles, workspace clone) and then hands over as the working user in the
 # workspace directory.
 #
-# --reset is the only path that destroys a runtime: it removes the runtime
-# and its paired docker storage volume, taking everything the runtime
-# accumulated - tooling, configuration, logins, unpushed work - with it
-# (ADR-0021). It prompts for confirmation unless --force is given. The next
-# launch then creates a fresh runtime.
+# --reset is the only launcher path that destroys a runtime: it removes
+# the runtime and its paired docker storage volume, taking everything the
+# runtime accumulated - tooling, configuration, logins, unpushed work -
+# with it (ADR-0021). It prompts for confirmation unless --force is given.
+# The next launch then creates a fresh runtime. (cleanup-agent-sessions
+# also removes runtimes, on demand and by name or --all.)
 #
 #   --reset             destroy this repo's runtime and its docker volume,
-#                        after a confirmation prompt; the only destruction
-#                        path
+#                        after a confirmation prompt; the launcher's one
+#                        destruction path
 #   --force             with --reset, skip the confirmation prompt (for
 #                        scripted resets); invalid on its own
 #   --name NAME          runtime name (default: <repo>-sandbox). Attaches to
@@ -73,39 +74,6 @@ violation_flag=()
 memory="4G"
 cpus="4"
 max_memory="16G"
-
-# "name<TAB>status" for sandboxes matching this repo's label plus any
-# exact-name match (pre-label sandboxes). A name in neither status list is
-# reported "unknown", not dropped.
-matching_sandboxes() {
-  local base="$1" names running stopped name status
-  running=$(msb list --running -q 2>/dev/null || true)
-  stopped=$(msb list --stopped -q 2>/dev/null || true)
-
-  names=$(
-    {
-      msb list --label "repo=$base" -q 2>/dev/null || true
-      if sandbox_exists "$base"; then printf '%s\n' "$base"; fi
-    } | sort -u
-  )
-  if [ -z "$names" ]; then
-    return 0
-  fi
-
-  while IFS= read -r name; do
-    if [ -z "$name" ]; then
-      continue
-    fi
-    if contains_line "$running" "$name"; then
-      status=running
-    elif contains_line "$stopped" "$name"; then
-      status=stopped
-    else
-      status=unknown
-    fi
-    printf '%s\t%s\n' "$name" "$status"
-  done <<<"$names"
-}
 
 # Reuses the one sandbox for this repo, asks if several, mints
 # `<repo>-sandbox` (or `-sandbox-NNNN` on collision) if none.
