@@ -29,13 +29,21 @@ STUB
 case "$1" in
   list)
     want=all
+    labelled=0
     for a in "$@"; do
       case "$a" in
         --running) want=running ;;
         --stopped) want=stopped ;;
+        --label) labelled=1 ;;
       esac
     done
-    for n in $STUB_ALL; do
+    # `list --label repo=<repo>` answers from STUB_LABELLED when set, so a
+    # test can make a name exist globally but not for this repo.
+    src="$STUB_ALL"
+    if [ "$labelled" = 1 ] && [ -n "${STUB_LABELLED+x}" ]; then
+      src="$STUB_LABELLED"
+    fi
+    for n in $src; do
       case " $STUB_RUNNING " in
         *" $n "*) [ "$want" = stopped ] || printf '%s\n' "$n" ;;
         *) [ "$want" = running ] || printf '%s\n' "$n" ;;
@@ -96,7 +104,17 @@ cleanup() {
   export STUB_ALL="alpha" STUB_RUNNING="alpha"
   run cleanup --name alpha
   [ "$status" -ne 0 ]
-  [[ "$output" == *"currently running"* ]]
+  [[ "$output" == *"'alpha' is running"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+# --name acts only on this repo's label set; a name that exists for
+# another repo is refused, not removed.
+@test "--name for a runtime outside this repo's label set is refused" {
+  export STUB_ALL="alpha other-repo-box" STUB_LABELLED="alpha"
+  run cleanup --name other-repo-box --force
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no runtime named 'other-repo-box'"* ]]
   [ ! -f "$MSB_RM_FILE" ]
 }
 
@@ -148,11 +166,11 @@ cleanup() {
   grep -Fxq alpha "$MSB_RM_FILE"
 }
 
-@test "--all --dry-run lists the stopped ones, marks the running ones skipped, removes nothing" {
+@test "--all --dry-run lists the stopped ones, marks the running ones kept, removes nothing" {
   export STUB_ALL="alpha beta" STUB_RUNNING="beta"
   run cleanup --all --dry-run
   [ "$status" -eq 0 ]
-  [[ "$output" == *"leaving these running"* ]]
+  [[ "$output" == *"keeping these"* ]]
   [[ "$output" == *"beta"* ]]
   [[ "$output" == *"alpha"* ]]
   [[ "$output" == *"nothing removed"* ]]

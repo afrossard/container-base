@@ -42,13 +42,22 @@ STUB
 case "$1" in
   list)
     want=all
+    labelled=0
     for a in "$@"; do
       case "$a" in
         --running) want=running ;;
         --stopped) want=stopped ;;
+        --label) labelled=1 ;;
       esac
     done
-    for n in $STUB_ALL; do
+    # `list --label repo=<repo>` answers from STUB_LABELLED when set, so a
+    # test can make a name exist globally but not for this repo; every
+    # other `list` still answers from STUB_ALL.
+    src="$STUB_ALL"
+    if [ "$labelled" = 1 ] && [ -n "${STUB_LABELLED+x}" ]; then
+      src="$STUB_LABELLED"
+    fi
+    for n in $src; do
       case " $STUB_RUNNING " in
         *" $n "*) [ "$want" = stopped ] || printf '%s\n' "$n" ;;
         *) [ "$want" = running ] || printf '%s\n' "$n" ;;
@@ -149,14 +158,13 @@ has_flag_value() {
 # --- reset: the one launcher path that destroys a runtime (issue #146) ---
 #
 # reset() calls the script directly: unlike launch(), it appends no
-# `-- true`, because reset never reaches command handling. reset_bare()
-# drops --name too, so it exercises reset's own runtime resolution.
+# `-- true` and no --clone-url, because reset returns before either is
+# read. reset_bare() drops --name too, exercising reset's own runtime
+# resolution.
 
 reset() {
   "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" \
-    --name test-session \
-    --clone-url https://example.invalid/repo.git \
-    --reset "$@"
+    --name test-session --reset "$@"
 }
 
 reset_bare() {
@@ -187,6 +195,18 @@ reset_bare() {
   run reset --force
   [ "$status" -ne 0 ]
   [[ "$output" == *"no runtime named 'test-session'"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+# --reset acts only on this repo's label set, so a --name that exists for
+# another repo is refused, not destroyed.
+@test "--reset --name for a runtime outside this repo's label set is refused" {
+  export STUB_ALL="test-session other-repo-box"
+  export STUB_LABELLED="test-session"
+  run "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" \
+    --name other-repo-box --reset --force
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no runtime named 'other-repo-box'"* ]]
   [ ! -f "$MSB_RM_FILE" ]
 }
 

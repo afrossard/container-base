@@ -179,29 +179,34 @@ if [ "$force" = "1" ] && [ "$reset" != "1" ]; then
   exit 1
 fi
 
-# The one destruction path (ADR-0021). Targets this repo's runtime
-# directly - not the attach picker, which offers "start a new one" and has
-# no meaning here - refuses if there is nothing or more than one thing to
-# reset, confirms unless --force, then removes the runtime and its paired
-# docker volume.
+# The one destruction path (ADR-0021). Acts only on this repo's runtimes
+# (the `repo=<repo>` label set), so a --name from the wrong checkout can't
+# reach another repo's runtime, and never routes through the attach
+# picker's "start a new one" branch. Refuses on nothing, or on several
+# with no --name; confirms unless --force; then removes the runtime and
+# its paired docker volume.
 if [ "$reset" = "1" ]; then
-  if [ -z "$name" ]; then
-    reset_base=$(repo_name)
-    reset_matches=$(matching_sandboxes "$reset_base")
-    reset_count=$(printf '%s' "$reset_matches" | grep -c . || true)
-    if [ "$reset_count" -eq 0 ]; then
+  reset_base=$(repo_name)
+  reset_matches=$(matching_sandboxes "$reset_base")
+  reset_names=$(printf '%s\n' "$reset_matches" | cut -f1)
+
+  if [ -n "$name" ]; then
+    if ! contains_line "$reset_names" "$name"; then
+      echo "launch-agent-runtime: no runtime named '$name' for '$reset_base' to reset" >&2
+      exit 1
+    fi
+  else
+    if [ -z "$reset_matches" ]; then
       echo "launch-agent-runtime: no runtime for '$reset_base' to reset" >&2
       exit 1
     fi
+    reset_count=$(printf '%s\n' "$reset_matches" | wc -l | tr -d ' ')
     if [ "$reset_count" -gt 1 ]; then
       echo "launch-agent-runtime: several runtimes match '$reset_base'; pass --name to choose which to reset:" >&2
       printf '%s\n' "$reset_matches" | awk -F'\t' '{print "  " $1 " (" $2 ")"}' >&2
       exit 1
     fi
     name=$(printf '%s' "$reset_matches" | cut -f1)
-  elif ! sandbox_exists "$name"; then
-    echo "launch-agent-runtime: no runtime named '$name' to reset" >&2
-    exit 1
   fi
 
   reset_volume="${DOCKER_DATA_VOLUME:-${name}-docker-data}"

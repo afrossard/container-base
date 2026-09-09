@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Housekeeping for this repo's agent-runtime sandboxes: list them, or
-# remove the ones you are finished with along with their paired
-# <name>-docker-data volumes.
+# Housekeeping for this repo's agent runtimes: list them, or remove the
+# ones you are finished with along with their paired <name>-docker-data
+# volumes. It acts only on runtimes labelled for this repo.
 #
 # Usage:
 #   scripts/cleanup-agent-sessions [--name SESSION | --all] [--dry-run] [--force]
@@ -10,15 +10,15 @@
 # their state, removing nothing. A stopped runtime is a normal parked
 # state, so removal is never implicit: you name one, or ask for --all.
 #
-#   (no args)        list this repo's runtimes, each marked running or
-#                    stopped; remove nothing
-#   --name SESSION   remove this one runtime and its volume, running or
-#                    not (a running one needs --force too)
+#   (no args)        list this repo's runtimes, each marked running,
+#                    stopped, or unknown; remove nothing
+#   --name SESSION   remove this one runtime and its volume; a runtime
+#                    that is not stopped needs --force too
 #   --all            remove this repo's stopped runtimes and their
-#                    volumes; running ones are left alone unless --force
+#                    volumes; --force extends it to running ones too
 #   --dry-run        list what --name / --all would remove, remove nothing
-#   --force          skip the confirmation prompt; also removes a running
-#                    runtime that --name or --all would otherwise leave
+#   --force          skip the confirmation prompt, and remove a runtime
+#                    that --name or --all would otherwise keep
 
 set -eo pipefail
 
@@ -67,29 +67,35 @@ if [ -n "$target_name" ] && [ "$all" = "1" ]; then
   exit 1
 fi
 
+# This repo's runtimes only (the `repo=<repo>` label set): a bare call
+# lists them, --name acts on one of them, --all on the batch. A --name
+# outside this set is refused rather than reaching another repo's runtime.
 repo=$(repo_name)
 runtimes=$(matching_sandboxes "$repo")
+runtime_names=$(printf '%s\n' "$runtimes" | cut -f1)
 
-# Bare invocation: show what exists, touch nothing.
+# Bare invocation: show what exists, touch nothing. The list is this
+# path's product, so it goes to stdout; the framing goes to stderr.
 if [ -z "$target_name" ] && [ "$all" != "1" ]; then
   if [ -z "$runtimes" ]; then
     echo "cleanup-agent-sessions: no runtimes for '$repo'" >&2
     exit 0
   fi
   echo "cleanup-agent-sessions: runtimes for '$repo':" >&2
-  printf '%s\n' "$runtimes" | awk -F'\t' '{ printf "  %-32s %s\n", $1, $2 }' >&2
-  echo "cleanup-agent-sessions: pass --name SESSION to remove one, or --all for every stopped runtime." >&2
+  printf '%s\n' "$runtimes" | awk -F'\t' '{ printf "%-32s %s\n", $1, $2 }'
+  echo "cleanup-agent-sessions: pass --name SESSION to remove one, or --all to remove the stopped ones (running too, with --force)." >&2
   exit 0
 fi
 
 # Assemble the list of runtimes to remove.
 if [ -n "$target_name" ]; then
-  if ! sandbox_exists "$target_name"; then
-    echo "cleanup-agent-sessions: no runtime named '$target_name'" >&2
+  if ! contains_line "$runtime_names" "$target_name"; then
+    echo "cleanup-agent-sessions: no runtime named '$target_name' for '$repo'" >&2
     exit 1
   fi
-  if sandbox_is_running "$target_name" && [ "$force" != "1" ]; then
-    echo "cleanup-agent-sessions: '$target_name' is currently running; pass --force to remove it anyway" >&2
+  target_status=$(printf '%s\n' "$runtimes" | awk -F'\t' -v n="$target_name" '$1 == n { print $2 }')
+  if [ "$target_status" != "stopped" ] && [ "$force" != "1" ]; then
+    echo "cleanup-agent-sessions: '$target_name' is $target_status; pass --force to remove it anyway" >&2
     exit 1
   fi
   targets="$target_name"
@@ -99,12 +105,12 @@ else
     exit 0
   fi
   if [ "$force" = "1" ]; then
-    targets=$(printf '%s\n' "$runtimes" | cut -f1)
+    targets="$runtime_names"
   else
     targets=$(printf '%s\n' "$runtimes" | awk -F'\t' '$2 == "stopped" { print $1 }')
     skipped=$(printf '%s\n' "$runtimes" | awk -F'\t' '$2 != "stopped" { print $1 }')
     if [ -n "$skipped" ]; then
-      echo "cleanup-agent-sessions: leaving these running (pass --force to remove them too):" >&2
+      echo "cleanup-agent-sessions: keeping these (running, or state unknown); pass --force to remove them too:" >&2
       printf '%s\n' "$skipped" | sed 's/^/  /' >&2
     fi
     if [ -z "$targets" ]; then

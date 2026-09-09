@@ -14,7 +14,7 @@ No language runtime is baked: `uv` resolves Python and `mise` resolves everythin
 
 Pin a version and let Renovate bump it.
 
-`scripts/launch-agent-runtime` owns the agent runtime's lifecycle: a bare launch attaches to the repo's runtime, resumes it if stopped, and creates one only if none exists, never destroying anything (ADR-0021). The launcher's one destruction path is `launch-agent-runtime --reset`: it removes the runtime and its paired docker volume after a confirmation prompt (`--force` skips it), so the next launch starts from nothing. It is host-side tooling, a deliberate, narrow exception to this repo's image-only scope (ADR-0014). `scripts/cleanup-agent-sessions` is the housekeeping counterpart: a bare call lists this repo's runtimes and removes nothing; `--name SESSION` removes one and its volume; `--all` removes the stopped ones (add `--force` to include running ones).
+`scripts/launch-agent-runtime` owns the agent runtime's lifecycle: a bare launch attaches to the repo's runtime, resumes it if stopped, and creates one only if none exists, never destroying anything (ADR-0021). The launcher's one destruction path is `launch-agent-runtime --reset`: it removes the runtime and its paired docker volume after a confirmation prompt (`--force` skips it), so the next launch starts from nothing. It is host-side tooling, a deliberate, narrow exception to this repo's image-only scope (ADR-0014). `scripts/cleanup-agent-sessions` is the housekeeping counterpart, acting only on runtimes labelled for this repo: a bare call lists them and removes nothing; `--name SESSION` removes one and its volume; `--all` removes the stopped ones, and `--all --force` extends that to running ones.
 
 ## Host prerequisites
 
