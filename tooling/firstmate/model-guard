@@ -16,31 +16,32 @@
 # `model-guard: skip-prose-scan` (for docs that discuss the policy).
 #
 # Live command lines come from `ps -eo args=`, or from $MODEL_GUARD_PS
-# when that is set (the bats suite points it at a fixture).
+# when that is set (the bats suite points it at a fixture). This inspects
+# argv only: an agent that picked a barred tier through an interactive
+# picker carries nothing on its command line, so the `captain` alias
+# always passing `--model` is what closes that path, not this check.
 #
-# Exit 0 clean, 1 on any hit (each printed with its origin), 2 on a
-# usage error.
+# Exit 0 clean, 1 on any hit (each printed with its origin).
 
 set -eo pipefail
 
 case "${1:-}" in
   -h | --help)
-    echo "usage: model-guard [ROOT ...]" >&2
-    echo "asserts no opus/fable selection in the given roots (default: this" >&2
-    echo "recipe dir and \$FM_HOME) or in live process command lines" >&2
+    echo "usage: model-guard [ROOT ...]"
+    echo "asserts no opus/fable selection in the given roots (default: this"
+    echo "recipe dir and \$FM_HOME) or in live process command lines"
     exit 0
     ;;
 esac
 
-banned='opus|fable'
-self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-self="$self_dir/$(basename "${BASH_SOURCE[0]}")"
+barred='opus|fable'
+self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 
 roots=()
 if [ "$#" -gt 0 ]; then
   roots=("$@")
 else
-  roots=("$self_dir")
+  roots=("$(dirname "$self")")
   if [ -n "${FM_HOME:-}" ]; then
     roots+=("$FM_HOME")
   fi
@@ -54,13 +55,14 @@ for root in "${roots[@]}"; do
     continue
   fi
   while IFS= read -r -d '' file; do
-    if [ "$file" = "$self" ]; then
+    # -ef: same file regardless of how the path was spelled.
+    if [ "$file" -ef "$self" ]; then
       continue
     fi
     if grep -qIF 'model-guard: skip-prose-scan' "$file" 2>/dev/null; then
       continue
     fi
-    matches=$(grep -nIiE "$banned" "$file" | grep -vE '^[0-9]+:[[:space:]]*#' || true)
+    matches=$(grep -nIiE "$barred" "$file" | grep -vE '^[0-9]+:[[:space:]]*#' || true)
     if [ -n "$matches" ]; then
       while IFS= read -r line; do
         echo "config  $file:$line"
@@ -71,12 +73,12 @@ for root in "${roots[@]}"; do
 done
 
 # --- live processes ---
-# The second filter drops this guard's own pipeline: the `grep -iE
-# "$banned"` process shows up in the snapshot with the literal
+# The second filter drops this guard's own scan pipeline: the
+# `grep -iE "$barred"` process shows up in the snapshot with the literal
 # alternation `opus|fable` in its args, which a real model selection
 # (`--model opus`, `claude-opus-4`) never contains.
 # shellcheck disable=SC2086 # MODEL_GUARD_PS is a command word list on purpose
-procs=$(${MODEL_GUARD_PS:-ps -eo args=} 2>/dev/null | grep -iE "$banned" | grep -vF "$banned" | grep -vwE 'model-guard' || true)
+procs=$(${MODEL_GUARD_PS:-ps -eo args=} 2>/dev/null | grep -iE "$barred" | grep -vF "$barred" || true)
 if [ -n "$procs" ]; then
   while IFS= read -r line; do
     if [ -z "$line" ]; then

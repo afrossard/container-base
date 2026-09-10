@@ -101,3 +101,9 @@ setup() {
   run "$GUARD" "$BATS_TEST_DIRNAME/../../tooling/firstmate"
   [ "$status" -eq 0 ]
 }
+
+@test "the guard excludes its own file even via a non-normalized root" {
+  recipe="$BATS_TEST_DIRNAME/../../tooling/firstmate"
+  run "$GUARD" "$recipe/../firstmate"
+  [ "$status" -eq 0 ]
+}
