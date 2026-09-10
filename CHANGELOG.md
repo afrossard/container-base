@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.0.0](https://github.com/afrossard/container-base/compare/1.0.0...2.0.0) (2026-09-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* reset on demand, and cleanup stops garbage-collecting pets ([#154](https://github.com/afrossard/container-base/issues/154))
+
+### Features
+
+* reset on demand, and cleanup stops garbage-collecting pets ([#154](https://github.com/afrossard/container-base/issues/154)) ([1cad744](https://github.com/afrossard/container-base/commit/1cad744723d528f472088b650e1d34ccf73caac3))
+
+
+### Bug Fixes
+
+* **deps:** update ghcr.io/astral-sh/uv docker tag to v0.12.12 ([#155](https://github.com/afrossard/container-base/issues/155)) ([3c3f97c](https://github.com/afrossard/container-base/commit/3c3f97cc46f53b5594e41345d0a68af58f34c741))
+
 ## [1.0.0](https://github.com/afrossard/container-base/compare/0.4.2...1.0.0) (2026-09-08)
 
 
