@@ -28,6 +28,7 @@ See the README's "Host prerequisites" section.
 - `npm run build:dev` / `npm run test:dev` - build and test the dev image.
 - `npm run build:agent` / `npm run test:agent` - build and test the agent image.
 - `npm run test:launcher` / `npm run test:cleanup` / `npm run test:scripts` - test the host-side launcher, the cleanup script, and the CI helper scripts.
+- `npm run test:tooling` - test the runtime tooling recipes' check scripts (`tooling/`).
 - `npm run format:check` - required before every commit.
 
 ## Commit messages
@@ -39,6 +40,13 @@ See `CONTRIBUTING.md`; since PRs squash-merge, the PR title is what must conform
 
 Only a shipped-dependency bump (`images/**`) computes a release; everything else Renovate touches stays `chore(deps)`.
 See `CONTRIBUTING.md`'s "Renovate PRs and releases" section for the merge procedure and agent autonomy boundary; `/merge-renovate-prs` runs it.
+
+## Runtime tooling recipes
+
+`tooling/` holds the fixed configuration and provisioning skills that
+re-provision a fresh agent runtime to a working workflow stack after a
+reset (ADR-0021). A documented exception to the image-only scope, like
+the launcher. See `tooling/README.md`.
 
 ## Operational gotchas
 

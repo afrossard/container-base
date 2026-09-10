@@ -1,0 +1,10 @@
+{
+  "rules": [
+    {
+      "when": "task.kind == 'scout'",
+      "use": [{ "harness": "claude", "model": "sonnet", "effort": "medium" }],
+      "why": "Investigation reports do not need a larger tier; keeps scout sweeps cheap and off the barred models."
+    }
+  ],
+  "default": [{ "harness": "claude", "model": "sonnet", "effort": "medium" }]
+}
