@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/afrossard/container-base/compare/2.0.0...2.1.0) (2026-09-10)
+
+
+### Features
+
+* firstmate tooling recipe provisions a fresh runtime ([#158](https://github.com/afrossard/container-base/issues/158)) ([2db5702](https://github.com/afrossard/container-base/commit/2db5702208db55a2da6989870a577156461c71a5))
+
 ## [2.0.0](https://github.com/afrossard/container-base/compare/1.0.0...2.0.0) (2026-09-10)
 
 
