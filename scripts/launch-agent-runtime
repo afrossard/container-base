@@ -6,6 +6,7 @@
 #   scripts/launch-agent-runtime [--name NAME] [--image REF] \
 #     [--clone-url URL] [--secret ENV@HOST]... [--on-secret-violation ACTION] \
 #     [--memory SIZE] [--cpus N] [--max-memory SIZE] [-- COMMAND...]
+#   scripts/launch-agent-runtime --reset [--name NAME] [--force]
 #
 # A bare launch attaches to this repo's agent runtime, resuming it if
 # stopped and creating one only if none exists - it never destroys one.
@@ -13,6 +14,18 @@
 # dotfiles, workspace clone) and then hands over as the working user in the
 # workspace directory.
 #
+# --reset is the only launcher path that destroys a runtime: it removes
+# the runtime and its paired docker storage volume, taking everything the
+# runtime accumulated - tooling, configuration, logins, unpushed work -
+# with it (ADR-0021). It prompts for confirmation unless --force is given.
+# The next launch then creates a fresh runtime. (cleanup-agent-sessions
+# also removes runtimes, on demand and by name or --all.)
+#
+#   --reset             destroy this repo's runtime and its docker volume,
+#                        after a confirmation prompt; the launcher's one
+#                        destruction path
+#   --force             with --reset, skip the confirmation prompt (for
+#                        scripted resets); invalid on its own
 #   --name NAME          runtime name (default: <repo>-sandbox). Attaches to
 #                        a matching runtime by its `repo=<repo>` label,
 #                        resuming it if stopped; prompts if more than one
@@ -35,10 +48,14 @@
 # With no COMMAND, opens an interactive shell; with one, runs it
 # non-interactively. Both attach as the working user in the workspace.
 #
+# Each runtime gets a disk-backed /var/lib/docker volume named
+# <runtime name>-docker-data - derived from the name, so --reset and
+# cleanup-agent-sessions can always find it. Pre-create it yourself to
+# control its placement; otherwise the launcher creates it.
+#
 # Environment:
-#   DOCKER_DATA_VOLUME   /var/lib/docker volume name
-#                        (default: <runtime name>-docker-data)
-#   DOCKER_DATA_SIZE     size of that volume (default: 20G)
+#   DOCKER_DATA_SIZE     size of that volume when the launcher creates it
+#                        (default: 20G)
 
 # Not -u: bash 3.2 (macOS) treats "${secrets[@]}" as unbound while the
 # array is still empty.
@@ -54,44 +71,13 @@ version="1.0.0" # x-release-please-version
 image="ghcr.io/afrossard/container-base:${version}-agent"
 name=""
 clone_url=""
+reset=0
+force=0
 secrets=()
 violation_flag=()
 memory="4G"
 cpus="4"
 max_memory="16G"
-
-# "name<TAB>status" for sandboxes matching this repo's label plus any
-# exact-name match (pre-label sandboxes). A name in neither status list is
-# reported "unknown", not dropped.
-matching_sandboxes() {
-  local base="$1" names running stopped name status
-  running=$(msb list --running -q 2>/dev/null || true)
-  stopped=$(msb list --stopped -q 2>/dev/null || true)
-
-  names=$(
-    {
-      msb list --label "repo=$base" -q 2>/dev/null || true
-      if sandbox_exists "$base"; then printf '%s\n' "$base"; fi
-    } | sort -u
-  )
-  if [ -z "$names" ]; then
-    return 0
-  fi
-
-  while IFS= read -r name; do
-    if [ -z "$name" ]; then
-      continue
-    fi
-    if contains_line "$running" "$name"; then
-      status=running
-    elif contains_line "$stopped" "$name"; then
-      status=stopped
-    else
-      status=unknown
-    fi
-    printf '%s\t%s\n' "$name" "$status"
-  done <<<"$names"
-}
 
 # Reuses the one sandbox for this repo, asks if several, mints
 # `<repo>-sandbox` (or `-sandbox-NNNN` on collision) if none.
@@ -164,6 +150,14 @@ while [ "$#" -gt 0 ]; do
       clone_url="$2"
       shift 2
       ;;
+    --reset)
+      reset=1
+      shift
+      ;;
+    --force)
+      force=1
+      shift
+      ;;
     --)
       shift
       break
@@ -182,6 +176,52 @@ done
 
 # After the parse loop, so --help works without them.
 require_tools msb git
+
+if [ "$force" = "1" ] && [ "$reset" != "1" ]; then
+  echo "launch-agent-runtime: --force only applies to --reset" >&2
+  usage
+  exit 1
+fi
+
+# The one destruction path (ADR-0021). Acts only on this repo's runtimes
+# (the `repo=<repo>` label set), so a --name from the wrong checkout can't
+# reach another repo's runtime, and never routes through the attach
+# picker's "start a new one" branch. Refuses on nothing, or on several
+# with no --name; confirms unless --force; then removes the runtime and
+# its paired docker volume.
+if [ "$reset" = "1" ]; then
+  reset_base=$(repo_name)
+  reset_matches=$(matching_sandboxes "$reset_base")
+  reset_names=$(printf '%s\n' "$reset_matches" | cut -f1)
+
+  if [ -n "$name" ]; then
+    if ! contains_line "$reset_names" "$name"; then
+      echo "launch-agent-runtime: no runtime named '$name' for '$reset_base' to reset" >&2
+      exit 1
+    fi
+  else
+    if [ -z "$reset_matches" ]; then
+      echo "launch-agent-runtime: no runtime for '$reset_base' to reset" >&2
+      exit 1
+    fi
+    reset_count=$(printf '%s\n' "$reset_matches" | wc -l | tr -d ' ')
+    if [ "$reset_count" -gt 1 ]; then
+      echo "launch-agent-runtime: several runtimes match '$reset_base'; pass --name to choose which to reset:" >&2
+      printf '%s\n' "$reset_matches" | awk -F'\t' '{print "  " $1 " (" $2 ")"}' >&2
+      exit 1
+    fi
+    name=$(printf '%s' "$reset_matches" | cut -f1)
+  fi
+
+  echo "launch-agent-runtime: reset destroys runtime '$name' and its docker volume '${name}-docker-data'." >&2
+  echo "launch-agent-runtime: everything it accumulated - tooling, configuration, logins, unpushed work - goes with it (ADR-0021)." >&2
+
+  confirm_or_die "Reset '$name'? [y/N] " "$force"
+
+  remove_runtime "$name"
+  echo "launch-agent-runtime: reset complete; the next launch creates a fresh runtime" >&2
+  exit 0
+fi
 
 if [ -z "$clone_url" ]; then
   if ! clone_url=$(repo_url); then
@@ -245,9 +285,9 @@ fi
 
 echo "launch-agent-runtime: no runtime for this repo, creating one" >&2
 
-: "${DOCKER_DATA_VOLUME:=${name}-docker-data}"
+docker_volume="${name}-docker-data"
 
-ensure_volume "$DOCKER_DATA_VOLUME" --kind disk --size "$DOCKER_DATA_SIZE"
+ensure_volume "$docker_volume" --kind disk --size "$DOCKER_DATA_SIZE"
 
 # Pins network egress explicitly: msb's implicit default reverts to no
 # egress once any --net-rule is added. A hostname allowlist was rejected -
@@ -264,7 +304,7 @@ exec msb run "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
   --net public \
   "${secrets[@]}" \
   "${violation_flag[@]}" \
-  --mount-named "${DOCKER_DATA_VOLUME}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
+  --mount-named "${docker_volume}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
   --env "WORKSPACE_CLONE_URL=${clone_url}" \
   --env "DOTFILES_REPO=${DOTFILES_REPO:-}" \
   "$image" -- "$@"

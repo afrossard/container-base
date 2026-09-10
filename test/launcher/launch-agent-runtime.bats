@@ -11,75 +11,26 @@
 setup() {
   stub_dir="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$stub_dir"
+  cp "$BATS_TEST_DIRNAME/../helpers/msb" "$BATS_TEST_DIRNAME/../helpers/jq" "$stub_dir/"
+  chmod +x "$stub_dir/msb" "$stub_dir/jq"
+  export PATH="$stub_dir:$PATH"
+
+  # The stub records one argument per line, so a value that word-split
+  # into two arguments fails a whole-line match here. Each file below is
+  # read by at least one test; see test/helpers/msb for the stub itself.
   export MSB_ARGS_FILE="$BATS_TEST_TMPDIR/msb-args"
   export MSB_START_FILE="$BATS_TEST_TMPDIR/msb-start"
   export MSB_EXEC_FILE="$BATS_TEST_TMPDIR/msb-exec"
+  export MSB_RM_FILE="$BATS_TEST_TMPDIR/msb-rm"
+  export MSB_VOLUME_FILE="$BATS_TEST_TMPDIR/msb-volume"
+  export JQ_CALLED_FILE="$BATS_TEST_TMPDIR/jq-called"
 
   # Runtime state the stub answers `list` from: names in STUB_ALL exist,
-  # names also in STUB_RUNNING are running. Empty by default, so the common
-  # case is "no runtime yet" and the launcher takes its create path.
+  # names also in STUB_RUNNING are running. Empty by default, so the
+  # common case is "no runtime yet" and the launcher takes its create
+  # path.
   export STUB_ALL=""
   export STUB_RUNNING=""
-
-  # The launcher must not call jq (issue #83). Exit 127 alone isn't enough:
-  # sandbox_is_running runs as `... || return 0`, which suppresses set -e,
-  # so the stub records the call and the test asserts on the recording.
-  export JQ_CALLED_FILE="$BATS_TEST_TMPDIR/jq-called"
-  cat > "$stub_dir/jq" <<'STUB'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >> "$JQ_CALLED_FILE"
-exit 127
-STUB
-  chmod +x "$stub_dir/jq"
-
-  # A state-driven stub: `list` answers from STUB_ALL/STUB_RUNNING, and
-  # each lifecycle subcommand records what it was handed so a test can
-  # assert which one the launcher chose (create / resume / attach).
-  cat > "$stub_dir/msb" <<'STUB'
-#!/usr/bin/env bash
-case "$1" in
-  list)
-    want=all
-    for a in "$@"; do
-      case "$a" in
-        --running) want=running ;;
-        --stopped) want=stopped ;;
-      esac
-    done
-    for n in $STUB_ALL; do
-      case " $STUB_RUNNING " in
-        *" $n "*) [ "$want" = stopped ] || printf '%s\n' "$n" ;;
-        *) [ "$want" = running ] || printf '%s\n' "$n" ;;
-      esac
-    done
-    ;;
-  volume)
-    # Succeeding means ensure_volume never calls create.
-    exit 0
-    ;;
-  start)
-    printf '%s\n' "$@" >> "$MSB_START_FILE"
-    exit 0
-    ;;
-  exec)
-    # Both the agent-bringup call and the shell/command call land here,
-    # appended so a test can assert on either.
-    printf '%s\n' "$@" >> "$MSB_EXEC_FILE"
-    exit 0
-    ;;
-  run)
-    printf '%s\n' "$@" > "$MSB_ARGS_FILE"
-    exit 0
-    ;;
-  *)
-    # Loud, so an unrecognized subcommand can't become a silent pass.
-    echo "msb stub: unexpected subcommand: $1" >&2
-    exit 64
-    ;;
-esac
-STUB
-  chmod +x "$stub_dir/msb"
-  export PATH="$stub_dir:$PATH"
 }
 
 # Explicit --name skips sandbox resolution and --clone-url skips the remote
@@ -124,17 +75,119 @@ has_flag_value() {
 
 # --- flags removed with the disposable model get no special handling; they
 #     fall to the generic unknown-argument path. --github-token and
-#     --persist-claude-auth are retired (ADR-0022); --force skipped the
-#     replace confirmation that no longer exists, and returns with the reset
-#     path (issue #146). ---
+#     --persist-claude-auth are retired (ADR-0022). --force is no longer
+#     retired: it is the reset path's confirmation override (issue #146),
+#     tested below. ---
 
-@test "the removed flags are rejected as unknown arguments" {
-  for flag in --github-token --persist-claude-auth --no-persist-claude-auth --force; do
+@test "the removed credential flags are rejected as unknown arguments" {
+  for flag in --github-token --persist-claude-auth --no-persist-claude-auth; do
     run launch "$flag"
     [ "$status" -ne 0 ]
     [[ "$output" == *"unrecognized argument"* ]]
     [ ! -f "$MSB_ARGS_FILE" ]
   done
+}
+
+# --- reset: the one launcher path that destroys a runtime (issue #146) ---
+#
+# reset() calls the script directly: unlike launch(), it appends no
+# `-- true` and no --clone-url, because reset returns before either is
+# read. reset_bare() drops --name too, exercising reset's own runtime
+# resolution.
+
+reset() {
+  "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" \
+    --name test-session --reset "$@"
+}
+
+reset_bare() {
+  "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" --reset "$@"
+}
+
+@test "--reset with --force destroys the runtime and its paired docker volume, and creates nothing" {
+  export STUB_ALL="test-session"
+  run reset --force
+  [ "$status" -eq 0 ]
+  grep -Fxq "test-session" "$MSB_RM_FILE"
+  grep -Fxq "remove" "$MSB_VOLUME_FILE"
+  grep -Fxq "test-session-docker-data" "$MSB_VOLUME_FILE"
+  [ ! -f "$MSB_ARGS_FILE" ]
+  [ ! -f "$MSB_START_FILE" ]
+}
+
+@test "--reset --name for a runtime that does not exist removes nothing and says so" {
+  export STUB_ALL=""
+  run reset --force
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no runtime named 'test-session'"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+# --reset acts only on this repo's label set, so a --name that exists for
+# another repo is refused, not destroyed.
+@test "--reset --name for a runtime outside this repo's label set is refused" {
+  export STUB_ALL="test-session other-repo-box"
+  export STUB_LABELLED="test-session"
+  run "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" \
+    --name other-repo-box --reset --force
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no runtime named 'other-repo-box'"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+@test "a bare --reset with no runtime for the repo removes nothing and says so" {
+  export STUB_ALL=""
+  run reset_bare --force
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no runtime for"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+# reset targets this repo's runtime directly - it must never fall through
+# to the attach picker's "start a new one" branch.
+@test "a bare --reset with several matching runtimes refuses and asks for --name" {
+  export STUB_ALL="one two"
+  run reset_bare --force
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"pass --name"* ]]
+  [[ "$output" != *"start a new one"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+@test "a bare --reset with exactly one matching runtime destroys it" {
+  export STUB_ALL="solo"
+  run reset_bare --force
+  [ "$status" -eq 0 ]
+  grep -Fxq "solo" "$MSB_RM_FILE"
+  grep -Fxq "solo-docker-data" "$MSB_VOLUME_FILE"
+}
+
+@test "--reset without --force refuses when stdin isn't a terminal, and removes nothing" {
+  export STUB_ALL="test-session"
+  run reset
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"terminal"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+@test "--force without --reset is rejected" {
+  run launch --force
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"--force only applies to --reset"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+@test "no bare launch path removes a runtime" {
+  export STUB_ALL="test-session" STUB_RUNNING="test-session"
+  run launch
+  [ "$status" -eq 0 ]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+@test "the usage text names reset as the launcher's only destruction path" {
+  run "$BATS_TEST_DIRNAME/../../scripts/launch-agent-runtime" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--reset is the only launcher path that destroys a runtime"* ]]
 }
 
 @test "the create path carries no ~/.claude volume or PERSIST_CLAUDE_AUTH env" {
