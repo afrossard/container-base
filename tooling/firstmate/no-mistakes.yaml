@@ -1,0 +1,21 @@
+# no-mistakes gate configuration for container-base.
+# Applied by the provision-firstmate recipe (issue #145, ADR-0021).
+#
+# The larger model tiers are barred across this runtime; every agent
+# entry below stays on sonnet, and tooling/firstmate/model-guard fails
+# the runtime if that regresses.
+
+# Merge authority: crew ship-tasks reach origin only through the gate.
+mode: no-mistakes
+
+# The pipeline agent the gate runs its review, test, docs and lint
+# passes through. Pinned explicitly so the gate never opens an
+# interactive model picker in an unattended run.
+agent:
+  harness: claude
+  model: sonnet
+
+# Ordered fallback when the primary gate-agent reports no quota.
+fallback:
+  - harness: claude
+    model: sonnet

@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# model-guard - deterministic assertion that nothing in the firstmate
+# tooling recipe, nothing applied into the runtime, and nothing running
+# right now selects a barred model tier (issue #145, ADR-0021).
+#
+# The barred tiers are opus and fable. The token-burn incident from the
+# firstmate tryout (issue #100) must not be able to recur silently.
+#
+# Usage:
+#   model-guard [ROOT ...]
+#
+# With no ROOT it scans this recipe directory, and $FM_HOME too when that
+# is set. Every regular file under each ROOT is read; a line that names a
+# barred tier outside a leading `#` comment is a hit. A file may opt out
+# of the content scan entirely by containing the token
+# `model-guard: skip-prose-scan` (for docs that discuss the policy).
+#
+# Live command lines come from `ps -eo args=`, or from $MODEL_GUARD_PS
+# when that is set (the bats suite points it at a fixture).
+#
+# Exit 0 clean, 1 on any hit (each printed with its origin), 2 on a
+# usage error.
+
+set -eo pipefail
+
+case "${1:-}" in
+  -h | --help)
+    echo "usage: model-guard [ROOT ...]" >&2
+    echo "asserts no opus/fable selection in the given roots (default: this" >&2
+    echo "recipe dir and \$FM_HOME) or in live process command lines" >&2
+    exit 0
+    ;;
+esac
+
+banned='opus|fable'
+self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+self="$self_dir/$(basename "${BASH_SOURCE[0]}")"
+
+roots=()
+if [ "$#" -gt 0 ]; then
+  roots=("$@")
+else
+  roots=("$self_dir")
+  if [ -n "${FM_HOME:-}" ]; then
+    roots+=("$FM_HOME")
+  fi
+fi
+
+hits=0
+
+# --- configuration on disk ---
+for root in "${roots[@]}"; do
+  if [ ! -e "$root" ]; then
+    continue
+  fi
+  while IFS= read -r -d '' file; do
+    if [ "$file" = "$self" ]; then
+      continue
+    fi
+    if grep -qIF 'model-guard: skip-prose-scan' "$file" 2>/dev/null; then
+      continue
+    fi
+    matches=$(grep -nIiE "$banned" "$file" | grep -vE '^[0-9]+:[[:space:]]*#' || true)
+    if [ -n "$matches" ]; then
+      while IFS= read -r line; do
+        echo "config  $file:$line"
+        hits=$((hits + 1))
+      done <<<"$matches"
+    fi
+  done < <(find "$root" -type f -not -path '*/.git/*' -print0)
+done
+
+# --- live processes ---
+# The second filter drops this guard's own pipeline: the `grep -iE
+# "$banned"` process shows up in the snapshot with the literal
+# alternation `opus|fable` in its args, which a real model selection
+# (`--model opus`, `claude-opus-4`) never contains.
+# shellcheck disable=SC2086 # MODEL_GUARD_PS is a command word list on purpose
+procs=$(${MODEL_GUARD_PS:-ps -eo args=} 2>/dev/null | grep -iE "$banned" | grep -vF "$banned" | grep -vwE 'model-guard' || true)
+if [ -n "$procs" ]; then
+  while IFS= read -r line; do
+    if [ -z "$line" ]; then
+      continue
+    fi
+    echo "process $line"
+    hits=$((hits + 1))
+  done <<<"$procs"
+fi
+
+if [ "$hits" -gt 0 ]; then
+  echo "model-guard: $hits opus/fable reference(s) - barred (issue #145)" >&2
+  exit 1
+fi
+
+echo "model-guard: clean" >&2

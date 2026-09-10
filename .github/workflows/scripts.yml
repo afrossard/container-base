@@ -16,3 +16,5 @@ jobs:
       - uses: ./.github/actions/setup
 
       - run: npm run test:scripts
+
+      - run: npm run test:tooling
