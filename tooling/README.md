@@ -9,8 +9,8 @@ Versioned tooling recipes: the fixed configuration and provisioning instructions
 This repo publishes shared container images and nothing else (ADR-0001).
 `tooling/` is a deliberate, documented exception to that image-only scope, exactly like the host-side launcher under `scripts/` (ADR-0014).
 It is neither an image nor a layer of one.
-It lives here because it is a handful of small files that need review in the same diffs as the runtime they provision, and because the runtime's workspace clone is this repo, so a fresh runtime already has the recipe on disk.
-It is the first thing to extract into its own repo if it grows a second recipe or a firstmate hub that manages more than one project.
+It lives here because it is a handful of small files that need review in the same diffs as the runtime they provision, and because the runtime's workspace clone is this repo, so a fresh runtime already has the recipe on disk (until issue #169 makes the tooling repo a boot input for every runtime).
+Extraction into a dedicated repo (a future `agent-tooling`, which would also take the agent image) was considered and deferred; the repo owner will reconsider when the agent tooling matures (issue #169).
 
 ## Recipes
 
