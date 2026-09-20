@@ -14,15 +14,18 @@ No language runtime is baked: `uv` resolves Python and `mise` resolves everythin
 
 Pin a version and let Renovate bump it.
 
-`scripts/launch-agent-runtime` owns the agent runtime's lifecycle: a bare launch attaches to the repo's runtime, resumes it if stopped, and creates one only if none exists, never destroying anything (ADR-0021). The launcher's one destruction path is `launch-agent-runtime --reset`: it removes the runtime and its paired docker volume after a confirmation prompt (`--force` skips it), so the next launch starts from nothing. It is host-side tooling, a deliberate, narrow exception to this repo's image-only scope (ADR-0014). `scripts/cleanup-agent-sessions` is the housekeeping counterpart, acting only on runtimes labelled for this repo: a bare call lists them and removes nothing; `--name SESSION` removes one and its volume; `--all` removes the stopped ones, and `--all --force` extends that to running ones.
+`launch-agent-runtime` owns the agent runtime's lifecycle: a bare launch attaches to the current repo's runtime, resumes it if stopped, and creates one only if none exists, never destroying anything (ADR-0021). The launcher's one destruction path is `launch-agent-runtime --reset`: it removes the runtime and its paired docker volume after a confirmation prompt (`--force` skips it), so the next launch starts from nothing. It is host-side tooling, a deliberate, narrow exception to this repo's image-only scope (ADR-0014). `cleanup-agent-sessions` is the housekeeping counterpart, acting only on runtimes labelled for the current repo: a bare call lists them and removes nothing; `--name SESSION` removes one and its volume; `--all` removes the stopped ones, and `--all --force` extends that to running ones.
+
+Both ship through a personal Homebrew tap (`brew install afrossard/tap/container-base`), so any machine gets a working launcher and cleanup script with one command - no container-base checkout, no PATH edits. `brew upgrade` delivers new releases, each carrying its release-please-stamped agent image pin. Run either from inside any repo's checkout to create or resume a runtime anchored to that repo.
 
 ## Host prerequisites
 
-Those two scripts run on your own machine, so two tools have to be there already:
+The tap-installed launcher runs on your own machine, alongside two tools that have to be there already:
 
+- **Homebrew (`brew`)** - already part of the machine bootstrap; taps the formula that installs the launcher and cleanup script.
 - **[microsandbox](https://docs.microsandbox.dev/) (`msb`)** - the hypervisor the agent runtime runs on.
 - **git** - the session's clone URL and the repo name both come from your `origin` remote.
 
-Nothing else. Both scripts check for these and stop with one message if either is missing, so `--help` still works on a machine with neither. Everything else the images need ships inside them, and `npm ci` supplies the test tooling.
+Nothing else. Both scripts check for `msb` and `git`, stopping with one message if either is missing, so `--help` still works on a machine with neither. Everything else the images need ships inside them, and `npm ci` supplies the test tooling.
 
 See [`CONTEXT.md`](./CONTEXT.md) for the glossary and [`docs/adr/`](./docs/adr/) for why it's shaped this way.
