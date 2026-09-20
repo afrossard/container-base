@@ -19,7 +19,7 @@ The launcher's one destruction path is `launch-agent-runtime --reset`: it remove
 It is host-side tooling, a deliberate, narrow exception to this repo's image-only scope (ADR-0014).
 `cleanup-agent-sessions` is the housekeeping counterpart, acting only on runtimes labelled for the current repo: a bare call lists them and removes nothing; `--name SESSION` removes one and its volume; `--all` removes the stopped ones, and `--all --force` extends that to running ones.
 
-Both ship through a personal Homebrew tap (`brew install afrossard/tap/container-base`), so any machine gets a working launcher and cleanup script with one command - no container-base checkout, no PATH edits.
+Both ship through a personal Homebrew tap (`brew install afrossard/tap/agent-runtime`), so any machine gets a working launcher and cleanup script with one command - no container-base checkout, no PATH edits.
 `brew upgrade` delivers new releases, each carrying its release-please-stamped agent image pin.
 Run either from inside any repo's checkout to create or resume a runtime anchored to that repo.
 
