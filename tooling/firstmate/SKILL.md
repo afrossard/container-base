@@ -41,7 +41,9 @@ git clone https://github.com/kunchenguid/firstmate ~/firstmate
 export FM_HOME=~/firstmate
 ```
 
-Add `export FM_HOME=~/firstmate` to `~/.zshrc` so later sessions inherit it.
+Add `export FM_HOME=~/firstmate` to `~/.zshrc.d/firstmate.zsh` (create the directory if absent) so later sessions inherit it.
+This runtime's dotfiles are chezmoi-managed with `--force`, reapplied by `agent-bringup` on every attach, not just a fresh reset; a raw append to `~/.zshrc` itself is silently lost on the next attach.
+`~/.zshrc.d/*.zsh` is the existing devcontainer drop-in extension point (ADR-0006) that chezmoi does not manage.
 
 Verify: `~/firstmate/AGENTS.md` and `~/firstmate/bin/` exist.
 On drift (repo renamed or moved): find the current URL, clone it, and propose the URL edit to this file.
@@ -56,7 +58,7 @@ cd ~/firstmate && ./bin/fm-bootstrap.sh
 ```
 
 Backend: this runtime uses `FM_BACKEND=herdr` (issue #100), installed by `bin/fm-install-herdr.sh`; `tmux` is the fallback if herdr muddies the session.
-Export `FM_BACKEND=herdr` in `~/.zshrc`.
+Export `FM_BACKEND=herdr` in `~/.zshrc.d/firstmate.zsh` (see Step 2 on why not `~/.zshrc` directly).
 
 Then apply the version policy from `tooling/README.md`.
 The consent flow is still what installs each tool - never bypass the consent gate - but where it pins a version behind Homebrew's latest, `brew upgrade` that tool to the latest and re-run firstmate's own check.
@@ -76,9 +78,10 @@ Copy each file from `~/container-base/tooling/firstmate/` into place, then confi
 | `crew-dispatch.json` | `$FM_HOME/config/crew-dispatch.json`            | a dry-run crew or scout spawn shows harness `claude`, model `sonnet`        |
 | `captain.md`         | `$FM_HOME/data/captain.md`                      | firstmate's session-start digest lists the captain preferences file         |
 | `no-mistakes.yaml`   | `$FM_HOME/projects/<project>/.no-mistakes.yaml` | `no-mistakes` reports gate mode `no-mistakes` and gate-agent model `sonnet` |
-| `captain.sh`         | sourced from `~/.zshrc`                         | a fresh shell has `type captain`                                            |
+| `captain.sh`         | sourced from `~/.zshrc.d/firstmate.zsh`         | a fresh shell has `type captain`                                            |
 
-For `captain.sh`, append `source ~/container-base/tooling/firstmate/captain.sh` to `~/.zshrc` and open a new shell.
+For `captain.sh`, add `source ~/container-base/tooling/firstmate/captain.sh` to `~/.zshrc.d/firstmate.zsh` (the same drop-in used for `FM_HOME` and `FM_BACKEND` in Steps 2-3; create `~/.zshrc.d/` if absent) and open a new shell.
+Do not append to `~/.zshrc` directly - see Step 2 on why it does not survive.
 
 Verify: every row's "verify it is read by" check passes.
 On drift (a config path or schema key changed): copy the file unmodified into the location firstmate now reads, then propose the schema edit to `tooling/firstmate/<file>` with the upstream evidence.
