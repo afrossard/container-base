@@ -33,3 +33,14 @@ The quota scope is all-models, so switching models shares the same window - chan
 No fallback provider is authenticated in the guest, so hitting the wall is a hard stop, not a routing decision.
 Concurrency is the only burn-rate control available.
 The quota tooling and its threshold watcher come from the firstmate tooling recipe (#145), which is not built yet.
+
+## `git push` failing with `could not read Username` means the dotfiles apply deleted the credential helper
+
+`gh auth setup-git` writes `credential.https://github.com.helper` into `~/.config/git/config`, and that file is managed by the operator's `dotfiles`.
+`agent-bringup` re-runs `dotfiles-bootstrap` on every attach (ADR-0016), and `chezmoi update --apply --force` rewrites the file, so the helper is gone by the next attach - including a bare re-launch with no intervening stop.
+`gh auth status` still reports a login throughout, because `gh`'s token lives in `~/.config/gh/hosts.yml`, which `dotfiles` does not manage.
+So "`gh` works" is never evidence that git can push; they are separate credentials that fail independently.
+Re-running `gh auth setup-git` buys exactly one session.
+The workaround that survives an attach is `GIT_CONFIG_GLOBAL=~/.config/git/config.local gh auth setup-git`, which writes into the untracked file the managed config already includes.
+The durable fix is in `dotfiles` (afrossard/dotfiles#18); this repo deliberately carries no credential wiring, because the agent image must stay agnostic of any one forge or agent CLI (ADR-0001).
+Check the state with `git config --includes --get credential.https://github.com.helper`: without `--includes`, `git config --global --list` hides included files and reports a false negative.
