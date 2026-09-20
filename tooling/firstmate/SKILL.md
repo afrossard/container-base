@@ -90,14 +90,24 @@ Do not hand-edit the applied copy to add policy.
 ## Step 5 - run the model guard
 
 ```sh
-~/container-base/tooling/firstmate/model-guard "$FM_HOME"
+~/container-base/tooling/firstmate/model-guard \
+  ~/container-base/tooling/firstmate \
+  "$FM_HOME/config" \
+  "$FM_HOME/data" \
+  $(find "$FM_HOME/projects" -maxdepth 2 -name .no-mistakes.yaml 2>/dev/null)
 ```
+
+Scan the recipe itself plus the locations this recipe actually applies into - not all of `$FM_HOME`.
+`$FM_HOME` is firstmate's own source checkout (ADR-0021), so a bare `model-guard "$FM_HOME"` also sweeps firstmate's tracked tests and docs, which legitimately construct or discuss barred-tier strings (`model: opus` fixtures, policy prose) without opting out via `model-guard: skip-prose-scan`.
+That makes Step 5 permanently non-zero for reasons that have nothing to do with a real selection.
+Use `find` rather than a bare glob for the `.no-mistakes.yaml` lookup: an unmatched glob is a hard error under `zsh`'s default `nomatch`, and no project may be registered yet on a fresh runtime.
 
 It must exit 0.
 If it flags a selection, fix that selection to `sonnet` - never to a barred tier - and re-run until clean.
 
 Verify: exit 0.
-On drift (the guard flags a firstmate config file this recipe does not manage): that file is a new model-carrying location - add it to the recipe and to the `On drift` list here, do not silence the guard.
+On drift (the guard flags a file already in scope that this recipe does not manage): that file is a new model-carrying location - add it to the recipe and to the `On drift` list here, do not silence the guard.
+On drift (a new applied-config location appears under `$FM_HOME` outside `config/`, `data/`, and a project's `.no-mistakes.yaml`): this narrower scan misses it silently, unlike a full-tree scan - add the new location to the command above the same way.
 Re-run this check after any later change to fleet configuration; it is the standing assertion that nothing has regressed onto a barred tier (issue #143 story 19).
 
 ## Step 6 - bring up the captain
