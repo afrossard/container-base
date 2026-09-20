@@ -24,7 +24,7 @@ agent-bringup
 # workspace URL was configured.
 repo_dir="/home/$runtime_user"
 if [ -n "${WORKSPACE_CLONE_URL:-}" ]; then
-  repo_dir="/home/$runtime_user/$(basename "$WORKSPACE_CLONE_URL" .git)"
+  repo_dir="/home/$runtime_user/git/$(basename "$WORKSPACE_CLONE_URL" .git)"
 fi
 cd "$repo_dir"
 

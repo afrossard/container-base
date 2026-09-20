@@ -1,7 +1,7 @@
 #!/bin/sh
 # Converges an agent runtime to a working state: docker daemon up, the
-# operator's dotfiles applied, the workspace clone present. Idempotent and
-# safe to re-run.
+# operator's dotfiles applied, the workspace and tooling clones present.
+# Idempotent and safe to re-run.
 #
 # `msb start` re-runs neither the image entrypoint nor any registered boot
 # script (verified on issue #144), so this is the runtime's single
@@ -43,3 +43,8 @@ runuser -u "$runtime_user" -- dotfiles-bootstrap
 #    and a no-op with WORKSPACE_CLONE_URL unset (a bare `docker run` of the
 #    image, as the agent image test suite does).
 runuser -u "$runtime_user" -- ensure-workspace
+
+# 4. Tooling clone (issue #172): present after the first boot, same shape
+#    as the workspace clone. In this repo's own runtime the two land at
+#    the same path; whichever step runs first clones it, the other no-ops.
+runuser -u "$runtime_user" -- ensure-tooling

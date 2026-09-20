@@ -46,7 +46,9 @@
 #                        (default: `git remote get-url origin`)
 #
 # With no COMMAND, opens an interactive shell; with one, runs it
-# non-interactively. Both attach as the working user in the workspace.
+# non-interactively. Both attach as the working user in the workspace, at
+# /home/vscode/git/<repo> (the same convention the tooling repo clone
+# lands under, per the host's own ~/git/<repo> layout).
 #
 # Each runtime gets a disk-backed /var/lib/docker volume named
 # <runtime name>-docker-data - derived from the name, so --reset and
@@ -56,6 +58,10 @@
 # Environment:
 #   DOCKER_DATA_SIZE     size of that volume when the launcher creates it
 #                        (default: 20G)
+#   TOOLING_REPO         tooling repo to clone into the runtime at boot,
+#                        passed through the same as DOTFILES_REPO (default:
+#                        this repo's own clone URL, so the tooling recipes
+#                        are on disk whatever the workspace is)
 
 # Not -u: bash 3.2 (macOS) treats "${secrets[@]}" as unbound while the
 # array is still empty.
@@ -66,6 +72,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$script_dir/lib/agent-runtime.sh"
 
 : "${DOCKER_DATA_SIZE:=20G}"
+: "${TOOLING_REPO:=https://github.com/afrossard/container-base.git}"
 
 version="2.1.2" # x-release-please-version
 image="ghcr.io/afrossard/container-base:${version}-agent"
@@ -244,9 +251,12 @@ fi
 
 echo "launch-agent-runtime: runtime name: $name" >&2
 
-# The workspace clone under the working user's home - where an attach lands,
-# and where agent-bringup / ensure-workspace put the clone.
-workspace_dir="/home/vscode/$(basename "$clone_url" .git)"
+# The workspace clone, under the working user's ~/git - where an attach
+# lands, and where agent-bringup / ensure-workspace put the clone. The
+# tooling clone lands beside it under the same ~/git, via TOOLING_REPO
+# below; in this repo's own runtime the two resolve to the same path, and
+# clone-if-absent idempotence handles that with no special-casing.
+workspace_dir="/home/vscode/git/$(basename "$clone_url" .git)"
 
 # Blocks until the guest agent answers `msb exec`, which `msb start` and a
 # fresh `msb run` both return before. ~2 minutes of headroom, then give up
@@ -307,4 +317,5 @@ exec msb run "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
   --mount-named "${docker_volume}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
   --env "WORKSPACE_CLONE_URL=${clone_url}" \
   --env "DOTFILES_REPO=${DOTFILES_REPO:-}" \
+  --env "TOOLING_REPO=${TOOLING_REPO}" \
   "$image" -- "$@"

@@ -1,0 +1,35 @@
+#!/bin/sh
+# Ensures the tooling repo's clone is present under the runtime user's
+# ~/git, so the tooling recipes are on disk whatever the workspace is
+# (issue #172). Clones on the first boot; a no-op once the clone is there,
+# so it is safe to re-run on every attach of a long-lived runtime, the same
+# shape as ensure-workspace.
+#
+# Never force-updates an existing clone - a deliberate contrast with the
+# dotfiles bootstrap's update-and-force behaviour (ADR-0009): an
+# experiment in this clone is never clobbered by a later boot. Updates are
+# a `git pull` on demand, by hand.
+#
+# In this repo's own runtime, TOOLING_REPO defaults to the same URL as
+# WORKSPACE_CLONE_URL, so both scripts resolve to the same $HOME/git/<repo>
+# path. Whichever of ensure-workspace or ensure-tooling runs first clones
+# it; the other then finds it already present and no-ops. No special-casing
+# needed for the collision.
+set -eu
+
+# The launcher always sets this (default: this repo's own clone URL); a
+# bare `docker run` of the image does not, and then there is nothing to
+# clone (mirrors ensure-workspace with WORKSPACE_CLONE_URL unset).
+if [ -z "${TOOLING_REPO:-}" ]; then
+  echo "ensure-tooling: TOOLING_REPO unset, nothing to clone"
+  exit 0
+fi
+
+repo_dir="$HOME/git/$(basename "$TOOLING_REPO" .git)"
+
+if [ -e "$repo_dir/.git" ]; then
+  echo "ensure-tooling: $repo_dir already present, leaving it as is"
+  exit 0
+fi
+
+git clone "$TOOLING_REPO" "$repo_dir"

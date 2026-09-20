@@ -250,7 +250,7 @@ reset_bare() {
   run launch
   [ "$status" -eq 0 ]
   grep -A1 -Fx -- "-u" "$MSB_EXEC_FILE" | grep -Fxq -- "vscode"
-  grep -A1 -Fx -- "-w" "$MSB_EXEC_FILE" | grep -Fxq -- "/home/vscode/repo"
+  grep -A1 -Fx -- "-w" "$MSB_EXEC_FILE" | grep -Fxq -- "/home/vscode/git/repo"
 }
 
 @test "the create path no longer replaces a runtime or registers a boot script" {
@@ -273,4 +273,20 @@ reset_bare() {
   [ "$status" -eq 0 ]
   has_flag_value "--env" "WORKSPACE_CLONE_URL=https://example.invalid/repo.git"
   has_arg "--env"
+}
+
+# --- TOOLING_REPO (issue #172): passed at create time exactly as
+#     DOTFILES_REPO is, defaulting to this repo's own clone URL. ---
+
+@test "the create path forwards TOOLING_REPO, defaulting to this repo's clone URL" {
+  run launch
+  [ "$status" -eq 0 ]
+  has_flag_value "--env" "TOOLING_REPO=https://github.com/afrossard/container-base.git"
+}
+
+@test "an operator-set TOOLING_REPO overrides the default" {
+  export TOOLING_REPO="https://example.invalid/tooling.git"
+  run launch
+  [ "$status" -eq 0 ]
+  has_flag_value "--env" "TOOLING_REPO=https://example.invalid/tooling.git"
 }
