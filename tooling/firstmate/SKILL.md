@@ -41,7 +41,9 @@ git clone https://github.com/kunchenguid/firstmate ~/firstmate
 export FM_HOME=~/firstmate
 ```
 
-Add `export FM_HOME=~/firstmate` to `~/.zshrc` so later sessions inherit it.
+Add `export FM_HOME=~/firstmate` to `~/.zshrc.d/firstmate.zsh` (create the directory if absent) so later sessions inherit it.
+This runtime's dotfiles are chezmoi-managed with `--force`, reapplied by `agent-bringup` on every attach, not just a fresh reset; a raw append to `~/.zshrc` itself is silently lost on the next attach.
+`~/.zshrc.d/*.zsh` is the existing devcontainer drop-in extension point that chezmoi does not manage.
 
 Verify: `~/firstmate/AGENTS.md` and `~/firstmate/bin/` exist.
 On drift (repo renamed or moved): find the current URL, clone it, and propose the URL edit to this file.
@@ -56,7 +58,7 @@ cd ~/firstmate && ./bin/fm-bootstrap.sh
 ```
 
 Backend: this runtime uses `FM_BACKEND=herdr` (issue #100), installed by `bin/fm-install-herdr.sh`; `tmux` is the fallback if herdr muddies the session.
-Export `FM_BACKEND=herdr` in `~/.zshrc`.
+Export `FM_BACKEND=herdr` in `~/.zshrc.d/firstmate.zsh` (see Step 2 on why not `~/.zshrc` directly).
 
 Then apply the version policy from `tooling/README.md`.
 The consent flow is still what installs each tool - never bypass the consent gate - but where it pins a version behind Homebrew's latest, `brew upgrade` that tool to the latest and re-run firstmate's own check.
@@ -76,9 +78,10 @@ Copy each file from `~/container-base/tooling/firstmate/` into place, then confi
 | `crew-dispatch.json` | `$FM_HOME/config/crew-dispatch.json`            | a dry-run crew or scout spawn shows harness `claude`, model `sonnet`        |
 | `captain.md`         | `$FM_HOME/data/captain.md`                      | firstmate's session-start digest lists the captain preferences file         |
 | `no-mistakes.yaml`   | `$FM_HOME/projects/<project>/.no-mistakes.yaml` | `no-mistakes` reports gate mode `no-mistakes` and gate-agent model `sonnet` |
-| `captain.sh`         | sourced from `~/.zshrc`                         | a fresh shell has `type captain`                                            |
+| `captain.sh`         | sourced from `~/.zshrc.d/firstmate.zsh`         | a fresh shell has `type captain`                                            |
 
-For `captain.sh`, append `source ~/container-base/tooling/firstmate/captain.sh` to `~/.zshrc` and open a new shell.
+For `captain.sh`, add `source ~/container-base/tooling/firstmate/captain.sh` to `~/.zshrc.d/firstmate.zsh` (the same drop-in used for `FM_HOME` and `FM_BACKEND` in Steps 2-3; create `~/.zshrc.d/` if absent) and open a new shell.
+Do not append to `~/.zshrc` directly - see Step 2 on why it does not survive.
 
 Verify: every row's "verify it is read by" check passes.
 On drift (a config path or schema key changed): copy the file unmodified into the location firstmate now reads, then propose the schema edit to `tooling/firstmate/<file>` with the upstream evidence.
@@ -87,14 +90,30 @@ Do not hand-edit the applied copy to add policy.
 ## Step 5 - run the model guard
 
 ```sh
-~/container-base/tooling/firstmate/model-guard "$FM_HOME"
+no_mistakes_configs=()
+while IFS= read -r -d '' f; do
+  no_mistakes_configs+=("$f")
+done < <(find "$FM_HOME/projects" -maxdepth 2 -name .no-mistakes.yaml -print0 2>/dev/null)
+
+~/container-base/tooling/firstmate/model-guard \
+  ~/container-base/tooling/firstmate \
+  "$FM_HOME/config" \
+  "$FM_HOME/data" \
+  "${no_mistakes_configs[@]}"
 ```
+
+Scan the recipe itself plus the locations this recipe actually applies into - not all of `$FM_HOME`.
+`$FM_HOME` is firstmate's own source checkout (ADR-0021), so a bare `model-guard "$FM_HOME"` also sweeps firstmate's tracked tests and docs, which legitimately construct or discuss barred-tier strings (`model: opus` fixtures, policy prose) without opting out via `model-guard: skip-prose-scan`.
+That makes Step 5 permanently non-zero for reasons that have nothing to do with a real selection.
+Use `find` rather than a bare glob for the `.no-mistakes.yaml` lookup: an unmatched glob is a hard error under `zsh`'s default `nomatch`, and no project may be registered yet on a fresh runtime.
+Collect `find`'s results into an array via a `-print0`/`read -d ''` loop rather than an unquoted `$(find ...)` substitution: word-splitting an unquoted substitution breaks any project directory name containing a space into multiple nonexistent paths, which `model-guard`'s own root-existence check then silently skips.
 
 It must exit 0.
 If it flags a selection, fix that selection to `sonnet` - never to a barred tier - and re-run until clean.
 
 Verify: exit 0.
-On drift (the guard flags a firstmate config file this recipe does not manage): that file is a new model-carrying location - add it to the recipe and to the `On drift` list here, do not silence the guard.
+On drift (the guard flags a file already in scope that this recipe does not manage): that file is a new model-carrying location - add it to the recipe and to the `On drift` list here, do not silence the guard.
+On drift (a new applied-config location appears under `$FM_HOME` outside `config/`, `data/`, and a project's `.no-mistakes.yaml`): this narrower scan misses it silently, unlike a full-tree scan - add the new location to the command above the same way.
 Re-run this check after any later change to fleet configuration; it is the standing assertion that nothing has regressed onto a barred tier (issue #143 story 19).
 
 ## Step 6 - bring up the captain

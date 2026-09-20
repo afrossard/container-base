@@ -11,7 +11,9 @@
 #
 # With no ROOT it scans this recipe directory, and $FM_HOME too when that
 # is set. Every regular file under each ROOT is read; a line that names a
-# barred tier outside a leading `#` comment is a hit. A file may opt out
+# barred tier outside a leading `#` comment is a hit. Matching is on whole
+# words (`\bopus\b|\bfable\b`), so an unrelated word that merely contains
+# one as a substring (e.g. "diffable") is not a hit. A file may opt out
 # of the content scan entirely by containing the token
 # `model-guard: skip-prose-scan` (for docs that discuss the policy).
 #
@@ -34,7 +36,7 @@ case "${1:-}" in
     ;;
 esac
 
-barred='opus|fable'
+barred='\bopus\b|\bfable\b'
 self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 
 roots=()
