@@ -48,6 +48,14 @@ setup() {
   [ "$(cat "$repo_dir/file.txt")" = "local work" ]
 }
 
+@test "a directory that exists but is not a clone is not mistaken for one" {
+  mkdir -p "$repo_dir"
+  echo "junk" > "$repo_dir/stray"
+
+  run sh "$script"
+  [ "$status" -ne 0 ]
+}
+
 @test "an unset TOOLING_REPO is a no-op that exits 0 (bare image run)" {
   unset TOOLING_REPO
   run sh "$script"

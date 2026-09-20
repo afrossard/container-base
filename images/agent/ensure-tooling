@@ -10,8 +10,10 @@
 # experiment in this clone is never clobbered by a later boot. Updates are
 # a `git pull` on demand, by hand.
 #
-# In this repo's own runtime, TOOLING_REPO defaults to the same URL as
-# WORKSPACE_CLONE_URL, so both scripts resolve to the same $HOME/git/<repo>
+# In this repo's own runtime, TOOLING_REPO's default clone URL and
+# WORKSPACE_CLONE_URL name the same repo (their literal URLs can still
+# differ, e.g. HTTPS vs. SSH, but `basename ... .git` resolves both to the
+# same directory), so both scripts resolve to the same $HOME/git/<repo>
 # path. Whichever of ensure-workspace or ensure-tooling runs first clones
 # it; the other then finds it already present and no-ops. No special-casing
 # needed for the collision.
