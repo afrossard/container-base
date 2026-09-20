@@ -43,6 +43,17 @@ setup() {
   [ "$status" -eq 1 ]
 }
 
+@test "a barred tier as a whole word is a hit, but a substring match is not" {
+  printf 'model: opus\n' >"$root/a.yaml"
+  run "$GUARD" "$root"
+  [ "$status" -eq 1 ]
+
+  rm "$root/a.yaml"
+  printf 'this makes it auditable, diffable, and inheritable\n' >"$root/b.md"
+  run "$GUARD" "$root"
+  [ "$status" -eq 0 ]
+}
+
 @test "a leading-comment line naming a barred tier does not trip the guard" {
   printf '# never select opus or fable here\nmodel: sonnet\n' >"$root/notes.conf"
   run "$GUARD" "$root"
@@ -76,7 +87,7 @@ setup() {
 @test "the guard's own scan pipeline in the process list is not a hit" {
   printf 'model: sonnet\n' >"$root/agent.yaml"
   {
-    echo 'grep -iE opus|fable'
+    echo 'grep -iE \bopus\b|\bfable\b'
     echo 'node /x/claude --model sonnet'
   } >"$BATS_TEST_TMPDIR/ps.txt"
   export MODEL_GUARD_PS="cat $BATS_TEST_TMPDIR/ps.txt"
