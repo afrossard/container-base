@@ -43,7 +43,7 @@ export FM_HOME=~/firstmate
 
 Add `export FM_HOME=~/firstmate` to `~/.zshrc.d/firstmate.zsh` (create the directory if absent) so later sessions inherit it.
 This runtime's dotfiles are chezmoi-managed with `--force`, reapplied by `agent-bringup` on every attach, not just a fresh reset; a raw append to `~/.zshrc` itself is silently lost on the next attach.
-`~/.zshrc.d/*.zsh` is the existing devcontainer drop-in extension point (ADR-0006) that chezmoi does not manage.
+`~/.zshrc.d/*.zsh` is the existing devcontainer drop-in extension point that chezmoi does not manage.
 
 Verify: `~/firstmate/AGENTS.md` and `~/firstmate/bin/` exist.
 On drift (repo renamed or moved): find the current URL, clone it, and propose the URL edit to this file.
@@ -90,17 +90,23 @@ Do not hand-edit the applied copy to add policy.
 ## Step 5 - run the model guard
 
 ```sh
+no_mistakes_configs=()
+while IFS= read -r -d '' f; do
+  no_mistakes_configs+=("$f")
+done < <(find "$FM_HOME/projects" -maxdepth 2 -name .no-mistakes.yaml -print0 2>/dev/null)
+
 ~/container-base/tooling/firstmate/model-guard \
   ~/container-base/tooling/firstmate \
   "$FM_HOME/config" \
   "$FM_HOME/data" \
-  $(find "$FM_HOME/projects" -maxdepth 2 -name .no-mistakes.yaml 2>/dev/null)
+  "${no_mistakes_configs[@]}"
 ```
 
 Scan the recipe itself plus the locations this recipe actually applies into - not all of `$FM_HOME`.
 `$FM_HOME` is firstmate's own source checkout (ADR-0021), so a bare `model-guard "$FM_HOME"` also sweeps firstmate's tracked tests and docs, which legitimately construct or discuss barred-tier strings (`model: opus` fixtures, policy prose) without opting out via `model-guard: skip-prose-scan`.
 That makes Step 5 permanently non-zero for reasons that have nothing to do with a real selection.
 Use `find` rather than a bare glob for the `.no-mistakes.yaml` lookup: an unmatched glob is a hard error under `zsh`'s default `nomatch`, and no project may be registered yet on a fresh runtime.
+Collect `find`'s results into an array via a `-print0`/`read -d ''` loop rather than an unquoted `$(find ...)` substitution: word-splitting an unquoted substitution breaks any project directory name containing a space into multiple nonexistent paths, which `model-guard`'s own root-existence check then silently skips.
 
 It must exit 0.
 If it flags a selection, fix that selection to `sonnet` - never to a barred tier - and re-run until clean.
