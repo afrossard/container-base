@@ -17,11 +17,20 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       version: ${{ steps.release.outputs.version }}
     steps:
+      # continue-on-error + the guard below work around
+      # https://github.com/googleapis/release-please-action/issues/1203:
+      # a transient failure while drafting the next release PR (pass 2) must not
+      # strand a release that pass 1 already cut, whose outputs are already set.
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         id: release
+        continue-on-error: true
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      - name: fail if release-please failed without cutting a release
+        if: steps.release.outcome == 'failure' && steps.release.outputs.release_created != 'true'
+        run: exit 1
 
   publish-dev:
     needs: release-please

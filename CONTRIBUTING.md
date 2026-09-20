@@ -40,6 +40,13 @@ If a release-please PR needs abandoning:
 - Prefer leaving it **open**. release-please updates an open PR in place on every run without ever touching the buggy snoozed-PR path.
 - If it must be closed, close it and leave it **unlabeled**. Do not add `autorelease: snooze`, however tempting the label's own description sounds.
 
+### A failed release run is healed by re-running it
+
+A transient GitHub API error can crash release-please mid-release, leaving a stranded state such as a tag with no GitHub Release and no published images (issue #179 documents one occurrence).
+release-please is idempotent on retry: it finds the merged release PR still labelled `autorelease: pending`, reuses the existing tag, creates the missing Release, and sets its outputs so the publish jobs run.
+So the recovery is one step: re-run `release.yml` on `main` (`gh workflow run release.yml`).
+Never hand-create the Release or publish images through a side branch - a hand-created Release makes the retry see a duplicate and skip straight to relabelling, without ever publishing the images.
+
 ## Renovate PRs and releases
 
 Renovate opens PRs for third-party dependency bumps; `renovate.json` sets `semanticCommits: "enabled"` and titles them accordingly, but only some of them should release.
