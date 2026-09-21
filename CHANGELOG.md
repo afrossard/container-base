@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.0.0](https://github.com/afrossard/container-base/compare/3.0.0...4.0.0) (2026-09-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **launcher:** rename --on-secret-violation to --secret-violation-action ([#190](https://github.com/afrossard/container-base/issues/190))
+
+### Bug Fixes
+
+* **launcher:** rename --on-secret-violation to --secret-violation-action ([#190](https://github.com/afrossard/container-base/issues/190)) ([7393ba1](https://github.com/afrossard/container-base/commit/7393ba1afb3077c41f1051facb107969c2d0476a))
+
 ## [3.0.0](https://github.com/afrossard/container-base/compare/2.1.2...3.0.0) (2026-09-21)
 
 

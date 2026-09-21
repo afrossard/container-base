@@ -76,7 +76,7 @@ source "$script_dir/lib/agent-runtime.sh"
 : "${DOCKER_DATA_SIZE:=20G}"
 : "${TOOLING_REPO:=https://github.com/afrossard/container-base.git}"
 
-version="3.0.0" # x-release-please-version
+version="4.0.0" # x-release-please-version
 image="ghcr.io/afrossard/container-base:${version}-agent"
 name=""
 clone_url=""
