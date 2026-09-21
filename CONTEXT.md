@@ -85,6 +85,11 @@ _Avoid_: session tooling - the former name, from when tooling died with a sessio
 The versioned configuration files and provisioning skill that make a freshly created agent runtime ready for one workflow stack, applied by an agent rather than a fixed script so upstream drift is adapted to instead of crashed into.
 `tooling/` holds them, a documented exception to this repo's image-only scope, like the launcher (ADR-0001, ADR-0021).
 
+**Tooling repo**:
+The repo carrying tooling recipes, cloned into every runtime at boot: `TOOLING_REPO`, passed by the launcher the same way as `DOTFILES_REPO` and defaulting to this repo, so the recipe is on disk whatever the workspace is (issue #172).
+It clones to `~/git/<repo>` beside the workspace clone; the two resolve to the same path in this repo's own runtime, which clone-if-absent idempotence handles without special-casing.
+_Avoid_: tooling recipe - that names the files inside the clone, not the repo itself.
+
 **Workspace**:
 The clone of one repo an agent session works in, made inside the agent runtime when the runtime is first created and kept across every later attach; a reset is what destroys it.
 It enters as a full clone and leaves as a pushed branch, sharing nothing with the operator's own checkout (ADR-0015, ADR-0021).

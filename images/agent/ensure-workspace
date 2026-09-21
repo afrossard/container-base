@@ -1,7 +1,8 @@
 #!/bin/sh
-# Ensures this repo's workspace clone is present in the runtime user's home.
-# Clones on the first boot; a no-op once the clone is there, so it is safe
-# to re-run on every attach of a long-lived runtime (issue #144).
+# Ensures this repo's workspace clone is present under the runtime user's
+# ~/git, matching the host's own ~/git/<repo> convention. Clones on the
+# first boot; a no-op once the clone is there, so it is safe to re-run on
+# every attach of a long-lived runtime (issue #144).
 #
 # No --depth: /code-review's `git merge-base` needs full history. No --ref:
 # a ref flag would default to the host's current branch and fail at boot
@@ -16,7 +17,7 @@ if [ -z "${WORKSPACE_CLONE_URL:-}" ]; then
   exit 0
 fi
 
-repo_dir="$HOME/$(basename "$WORKSPACE_CLONE_URL" .git)"
+repo_dir="$HOME/git/$(basename "$WORKSPACE_CLONE_URL" .git)"
 
 if [ -e "$repo_dir/.git" ]; then
   echo "ensure-workspace: $repo_dir already present, leaving it as is"

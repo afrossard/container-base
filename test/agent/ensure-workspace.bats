@@ -24,7 +24,7 @@ setup() {
   git clone -q --bare "$work" "$BATS_TEST_TMPDIR/repo.git"
 
   export WORKSPACE_CLONE_URL="file://$BATS_TEST_TMPDIR/repo.git"
-  repo_dir="$HOME/repo"
+  repo_dir="$HOME/git/repo"
 }
 
 @test "first run clones the workspace" {
