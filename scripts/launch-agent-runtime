@@ -39,8 +39,8 @@
 #                        forwarded to `msb run --secret-violation-action`
 #                        (block, block-and-log, block-and-terminate;
 #                        recommended: block-and-log with --secret). `passthrough`
-#                        is rejected here: msb scopes it per secret now
-#                        (`--secret ENV:passthrough=HOST@...`), not sandbox-wide
+#                        is rejected here - it's scoped per secret now, not
+#                        sandbox-wide (see the error message for the syntax)
 #   --memory SIZE        forwarded to `msb run --memory` (default: 4G)
 #   --cpus N             forwarded to `msb run --cpus` (default: 4)
 #   --max-memory SIZE    forwarded to `msb run --max-memory` (default: 16G)
