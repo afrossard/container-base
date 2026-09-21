@@ -6,7 +6,7 @@ description: Bring a freshly reset agent runtime up to a working firstmate + no-
 <!-- model-guard: skip-prose-scan - this file documents the opus/fable policy in prose -->
 
 You are provisioning a fresh agent runtime (ADR-0021).
-The runtime's workspace is this repo, `container-base`, so the recipe is already on disk at `~/container-base/tooling/firstmate/`.
+The runtime's workspace is this repo, `container-base`, so the recipe is already on disk at `~/git/container-base/tooling/firstmate/`.
 Your job is to reach a working captain session by **applying the fixed files in that directory and verifying each step**, not by writing new policy.
 
 ## Drift protocol - read first
@@ -37,15 +37,16 @@ On drift: none expected here; escalate if a backend cannot be installed.
 ## Step 2 - clone firstmate
 
 ```sh
-git clone https://github.com/kunchenguid/firstmate ~/firstmate
-export FM_HOME=~/firstmate
+git clone https://github.com/kunchenguid/firstmate ~/git/firstmate
+export FM_HOME=~/git/firstmate
 ```
 
-Add `export FM_HOME=~/firstmate` to `~/.zshrc.d/firstmate.zsh` (create the directory if absent) so later sessions inherit it.
+Add `export FM_HOME=~/git/firstmate` to `~/.zshrc.d/firstmate.zsh` (create the directory if absent) so later sessions inherit it.
 This runtime's dotfiles are chezmoi-managed with `--force`, reapplied by `agent-bringup` on every attach, not just a fresh reset; a raw append to `~/.zshrc` itself is silently lost on the next attach.
 `~/.zshrc.d/*.zsh` is the existing devcontainer drop-in extension point that chezmoi does not manage.
+`~/git` is the runtime's own clone convention (`ensure-workspace`/`ensure-tooling`, issue #172), matching the host's `~/git/<repo>` layout - not a bare `~/<repo>`.
 
-Verify: `~/firstmate/AGENTS.md` and `~/firstmate/bin/` exist.
+Verify: `~/git/firstmate/AGENTS.md` and `~/git/firstmate/bin/` exist.
 On drift (repo renamed or moved): find the current URL, clone it, and propose the URL edit to this file.
 
 ## Step 3 - install the tool family via firstmate's own consent flow
@@ -54,7 +55,7 @@ Firstmate installs its tool family (herdr, treehouse, the axi npm globals) throu
 Run it and answer the prompts:
 
 ```sh
-cd ~/firstmate && ./bin/fm-bootstrap.sh
+cd ~/git/firstmate && ./bin/fm-bootstrap.sh
 ```
 
 Backend: this runtime uses `FM_BACKEND=herdr` (issue #100), installed by `bin/fm-install-herdr.sh`; `tmux` is the fallback if herdr muddies the session.
@@ -70,7 +71,7 @@ On drift (bootstrap script renamed, a tool dropped or added): locate the equival
 
 ## Step 4 - apply the fixed configuration
 
-Copy each file from `~/container-base/tooling/firstmate/` into place, then confirm firstmate or no-mistakes actually reads it.
+Copy each file from `~/git/container-base/tooling/firstmate/` into place, then confirm firstmate or no-mistakes actually reads it.
 `<project>` is the managed project clone firstmate makes under `$FM_HOME/projects/`; for this runtime that is `container-base`.
 
 | Copy from            | To                                              | Verify it is read by                                                        |
@@ -80,7 +81,7 @@ Copy each file from `~/container-base/tooling/firstmate/` into place, then confi
 | `no-mistakes.yaml`   | `$FM_HOME/projects/<project>/.no-mistakes.yaml` | `no-mistakes` reports gate mode `no-mistakes` and gate-agent model `sonnet` |
 | `captain.sh`         | sourced from `~/.zshrc.d/firstmate.zsh`         | a fresh shell has `type captain`                                            |
 
-For `captain.sh`, add `source ~/container-base/tooling/firstmate/captain.sh` to `~/.zshrc.d/firstmate.zsh` (the same drop-in used for `FM_HOME` and `FM_BACKEND` in Steps 2-3; create `~/.zshrc.d/` if absent) and open a new shell.
+For `captain.sh`, add `source ~/git/container-base/tooling/firstmate/captain.sh` to `~/.zshrc.d/firstmate.zsh` (the same drop-in used for `FM_HOME` and `FM_BACKEND` in Steps 2-3; create `~/.zshrc.d/` if absent) and open a new shell.
 Do not append to `~/.zshrc` directly - see Step 2 on why it does not survive.
 
 Verify: every row's "verify it is read by" check passes.
@@ -95,16 +96,17 @@ while IFS= read -r -d '' f; do
   no_mistakes_configs+=("$f")
 done < <(find "$FM_HOME/projects" -maxdepth 2 -name .no-mistakes.yaml -print0 2>/dev/null)
 
-~/container-base/tooling/firstmate/model-guard \
-  ~/container-base/tooling/firstmate \
+~/git/container-base/tooling/firstmate/model-guard \
+  ~/git/container-base/tooling/firstmate \
   "$FM_HOME/config" \
-  "$FM_HOME/data" \
+  "$FM_HOME/data/captain.md" \
   "${no_mistakes_configs[@]}"
 ```
 
-Scan the recipe itself plus the locations this recipe actually applies into - not all of `$FM_HOME`.
+Scan the recipe itself plus the exact locations this recipe applies into - not all of `$FM_HOME`, and not all of `$FM_HOME/data` either.
 `$FM_HOME` is firstmate's own source checkout (ADR-0021), so a bare `model-guard "$FM_HOME"` also sweeps firstmate's tracked tests and docs, which legitimately construct or discuss barred-tier strings (`model: opus` fixtures, policy prose) without opting out via `model-guard: skip-prose-scan`.
-That makes Step 5 permanently non-zero for reasons that have nothing to do with a real selection.
+`$FM_HOME/data` itself is not purely fixed config either: alongside the applied `captain.md`, it accumulates per-task artifact directories (crew/scout report output, named after the task) that just as legitimately discuss the barred-tier policy in prose - observed directly with a code-review report analyzing this very guard's regex.
+Scanning the whole directory makes Step 5 permanently non-zero for reasons that have nothing to do with a real selection; scan the applied file itself, `$FM_HOME/data/captain.md`, not its parent.
 Use `find` rather than a bare glob for the `.no-mistakes.yaml` lookup: an unmatched glob is a hard error under `zsh`'s default `nomatch`, and no project may be registered yet on a fresh runtime.
 Collect `find`'s results into an array via a `-print0`/`read -d ''` loop rather than an unquoted `$(find ...)` substitution: word-splitting an unquoted substitution breaks any project directory name containing a space into multiple nonexistent paths, which `model-guard`'s own root-existence check then silently skips.
 
@@ -113,7 +115,7 @@ If it flags a selection, fix that selection to `sonnet` - never to a barred tier
 
 Verify: exit 0.
 On drift (the guard flags a file already in scope that this recipe does not manage): that file is a new model-carrying location - add it to the recipe and to the `On drift` list here, do not silence the guard.
-On drift (a new applied-config location appears under `$FM_HOME` outside `config/`, `data/`, and a project's `.no-mistakes.yaml`): this narrower scan misses it silently, unlike a full-tree scan - add the new location to the command above the same way.
+On drift (a new applied-config location appears under `$FM_HOME` outside `config/`, `data/captain.md`, and a project's `.no-mistakes.yaml`): this narrower scan misses it silently, unlike a full-tree scan - add the new location to the command above the same way.
 Re-run this check after any later change to fleet configuration; it is the standing assertion that nothing has regressed onto a barred tier (issue #143 story 19).
 
 ## Step 6 - bring up the captain
