@@ -61,16 +61,33 @@ has_flag_value() {
   has_flag_value "--secret" "OTHER@example.com"
 }
 
-@test "--secret alone adds no --on-secret-violation of its own" {
+@test "--secret alone adds no --secret-violation-action of its own" {
   run launch --secret OTHER@example.com
   [ "$status" -eq 0 ]
-  ! has_arg "--on-secret-violation"
+  ! has_arg "--secret-violation-action"
 }
 
-@test "an explicit --on-secret-violation is forwarded verbatim" {
-  run launch --secret OTHER@example.com --on-secret-violation block-and-terminate
+@test "an explicit --secret-violation-action is forwarded verbatim" {
+  run launch --secret OTHER@example.com --secret-violation-action block-and-terminate
   [ "$status" -eq 0 ]
-  has_flag_value "--on-secret-violation" "block-and-terminate"
+  has_flag_value "--secret-violation-action" "block-and-terminate"
+}
+
+@test "--secret-violation-action passthrough is rejected" {
+  run launch --secret OTHER@example.com --secret-violation-action passthrough
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"passthrough is rejected"* ]]
+  [ ! -f "$MSB_ARGS_FILE" ]
+}
+
+# msb renamed --on-secret-violation to --secret-violation-action (upstream
+# microsandbox#1356); the old spelling gets no alias and falls to the
+# generic unknown-argument path, same as the ADR-0022 removals below.
+@test "the old --on-secret-violation spelling is rejected as an unknown argument" {
+  run launch --secret OTHER@example.com --on-secret-violation block-and-log
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"unrecognized argument"* ]]
+  [ ! -f "$MSB_ARGS_FILE" ]
 }
 
 # --- flags removed with the disposable model get no special handling; they
