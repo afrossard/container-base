@@ -41,7 +41,7 @@ Dependencies that serve only this repo's own build or CI are not shipped depende
 _Avoid_: runtime dependency - nothing here runs at consumer runtime; the distinction is what ships, not what runs.
 
 **Host prerequisite**:
-A tool the operator installs on their own machine so this repo's host-side scripts run: `msb` and `git`, and nothing else.
+A tool the operator installs on their own machine so this repo's host-side scripts run: the tap-installed launcher (`brew install afrossard/tap/agent-runtime`), `msb`, and `git`, and nothing else.
 Not a shipped dependency: no image carries it and no `npm ci` supplies it.
 The bar is higher than for a dev image tool, since it is a manual install on a machine this repo cannot clean up.
 _Avoid_: host dependency - "dependency" reads as something a tool resolves for you, and this is the opposite.
