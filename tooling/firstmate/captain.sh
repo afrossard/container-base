@@ -10,8 +10,8 @@
 # re-run tooling/firstmate/model-guard; it must stay off the barred tiers.
 #
 # Source this from the runtime shell rc:
-#   echo 'source ~/container-base/tooling/firstmate/captain.sh' >> ~/.zshrc
+#   echo 'source ~/git/container-base/tooling/firstmate/captain.sh' >> ~/.zshrc
 
 captain() {
-  (cd "${FM_HOME:-$HOME/firstmate}" && exec claude --model sonnet "$@")
+  (cd "${FM_HOME:-$HOME/git/firstmate}" && exec claude --model sonnet "$@")
 }
