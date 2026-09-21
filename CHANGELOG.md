@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.0.0](https://github.com/afrossard/container-base/compare/2.1.2...3.0.0) (2026-09-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* the workspace clone moves from /home/vscode/<repo> to /home/vscode/git/<repo>. Existing runtimes keep the old path until their next --reset; nothing migrates it in place.
+
+### Features
+
+* make the tooling repo a boot input and move the workspace under ~/git ([#188](https://github.com/afrossard/container-base/issues/188)) ([78ad350](https://github.com/afrossard/container-base/commit/78ad35081504bf39b40fb5de7ac713bf64f1e4d6))
+
+
+### Bug Fixes
+
+* **tooling:** point firstmate .zshrc edits at the devcontainer drop-in ([#183](https://github.com/afrossard/container-base/issues/183)) ([bad88a7](https://github.com/afrossard/container-base/commit/bad88a7874d4b780322fc8960a4109b8263d28e2))
+
 ## [2.1.2](https://github.com/afrossard/container-base/compare/2.1.1...2.1.2) (2026-09-20)
 
 
