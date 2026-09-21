@@ -4,7 +4,7 @@
 #
 # Usage:
 #   scripts/launch-agent-runtime [--name NAME] [--image REF] \
-#     [--clone-url URL] [--secret ENV@HOST]... [--on-secret-violation ACTION] \
+#     [--clone-url URL] [--secret ENV@HOST]... [--secret-violation-action ACTION] \
 #     [--memory SIZE] [--cpus N] [--max-memory SIZE] [-- COMMAND...]
 #   scripts/launch-agent-runtime --reset [--name NAME] [--force]
 #
@@ -35,10 +35,12 @@
 #                        release-please bumps)
 #   --secret ENV@HOST    forwarded to `msb run --secret` (repeatable); ENV
 #                        is a host env var name, not a literal value
-#   --on-secret-violation ACTION
-#                        forwarded to `msb run --on-secret-violation`
-#                        (block, block-and-log, block-and-terminate,
-#                        passthrough; recommended: block-and-log with --secret)
+#   --secret-violation-action ACTION
+#                        forwarded to `msb run --secret-violation-action`
+#                        (block, block-and-log, block-and-terminate;
+#                        recommended: block-and-log with --secret). `passthrough`
+#                        is rejected here - it's scoped per secret now, not
+#                        sandbox-wide (see the error message for the syntax)
 #   --memory SIZE        forwarded to `msb run --memory` (default: 4G)
 #   --cpus N             forwarded to `msb run --cpus` (default: 4)
 #   --max-memory SIZE    forwarded to `msb run --max-memory` (default: 16G)
@@ -137,8 +139,12 @@ while [ "$#" -gt 0 ]; do
       secrets+=(--secret "$2")
       shift 2
       ;;
-    --on-secret-violation)
-      violation_flag=(--on-secret-violation "$2")
+    --secret-violation-action)
+      if [ "$2" = "passthrough" ]; then
+        echo "launch-agent-runtime: --secret-violation-action passthrough is rejected; msb scopes passthrough per secret now (--secret ENV:passthrough=HOST@...), not sandbox-wide" >&2
+        exit 1
+      fi
+      violation_flag=(--secret-violation-action "$2")
       shift 2
       ;;
     --memory)
