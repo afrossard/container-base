@@ -22,8 +22,7 @@
     "verify:publish-agent": "bats test/publish-agent",
     "test:launcher": "bats test/launcher",
     "test:cleanup": "bats test/cleanup",
-    "test:scripts": "bats test/scripts",
-    "test:tooling": "bats test/tooling"
+    "test:scripts": "bats test/scripts"
   },
   "devDependencies": {
     "@devcontainers/cli": "^0.89.0",

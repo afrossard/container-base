@@ -32,7 +32,7 @@ Without the quota tooling installed, nothing in the runtime surfaces how much ru
 The quota scope is all-models, so switching models shares the same window - changing model buys no extra time.
 No fallback provider is authenticated in the guest, so hitting the wall is a hard stop, not a routing decision.
 Concurrency is the only burn-rate control available.
-The quota tooling and its threshold watcher come from the firstmate tooling recipe (#145), which is not built yet.
+No quota tooling is provided; the firstmate recipe that was to supply it (#145) was dropped.
 
 ## `git push` failing with `could not read Username` means the dotfiles apply deleted the credential helper
 
