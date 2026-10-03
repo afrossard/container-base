@@ -83,7 +83,7 @@ _Avoid_: session tooling - the former name, from when tooling died with a sessio
 
 **Tooling recipe**:
 The versioned configuration files and provisioning skill that make a freshly created agent runtime ready for one workflow stack, applied by an agent rather than a fixed script so upstream drift is adapted to instead of crashed into.
-`tooling/` holds them, a documented exception to this repo's image-only scope, like the launcher (ADR-0001, ADR-0021).
+This repo no longer holds any: the firstmate recipe that lived in `tooling/` was removed (ADR-0021 amendment).
 
 **Tooling repo**:
 The repo carrying tooling recipes, cloned into every runtime at boot: `TOOLING_REPO`, passed by the launcher the same way as `DOTFILES_REPO` and defaulting to this repo, so the recipe is on disk whatever the workspace is (issue #172).
