@@ -8,6 +8,9 @@ They get a bare zsh, and that is the decision.
 The image ships functional wiring only.
 `/etc/zsh/zshenv` carries `PATH` for Homebrew and the mise shims, and `LANG` is set; `/etc/zsh/zshrc` is left as Debian ships it, and nothing in the image seeds history, completion, or a prompt.
 
+Completion functions are functional wiring too, so they ship: Homebrew's `fpath` entry rides its `shellenv` in `/etc/zsh/zshenv`, and uv's are generated into `/usr/local/share/zsh/site-functions` (issue #210).
+Nothing in the image runs `compinit`, so they stay inert until a developer's own configuration loads the completion system.
+
 The `starship` binary ships, but the `starship init zsh` line does not.
 A developer without dotfiles therefore has the binary on `PATH` and the default shell prompt.
 
