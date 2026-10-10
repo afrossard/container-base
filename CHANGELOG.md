@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.0.2](https://github.com/afrossard/container-base/compare/4.0.1...4.0.2) (2026-10-10)
+
+
+### Bug Fixes
+
+* **deps:** update ghcr.io/astral-sh/uv docker tag to v0.13.0 ([#200](https://github.com/afrossard/container-base/issues/200)) ([8a7d381](https://github.com/afrossard/container-base/commit/8a7d381f55d9c66a6b6ea9a187d11f012dfae29c))
+
 ## [4.0.1](https://github.com/afrossard/container-base/compare/4.0.0...4.0.1) (2026-10-03)
 
 
