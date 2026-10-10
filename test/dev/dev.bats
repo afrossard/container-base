@@ -140,10 +140,28 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
+# Issue #210: uv ships no completion files, so the image must generate
+# them. Same compinit check as brew's below.
+@test "compinit registers uv's and uvx's completions in a non-interactive zsh" {
+  run docker run --rm --user vscode "$IMAGE" zsh -c \
+    'autoload -Uz compinit && compinit -u -D && print -r -- "${_comps[uv]} ${_comps[uvx]}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "_uv _uvx" ]
+}
+
 @test "brew resolves in a non-interactive login shell" {
   run docker run --rm --user vscode "$IMAGE" zsh -lc 'command -v brew'
   [ "$status" -eq 0 ]
   [ "$output" = "/home/linuxbrew/.linuxbrew/bin/brew" ]
+}
+
+# Issue #210: dotfiles' ~/.zshrc only runs compinit, so completions must
+# already be on fpath. -D keeps compinit from writing a dump into $HOME.
+@test "compinit registers brew's and its formulae's completions in a non-interactive zsh" {
+  run docker run --rm --user vscode "$IMAGE" zsh -c \
+    'autoload -Uz compinit && compinit -u -D && print -r -- "${_comps[brew]} ${_comps[dive]} ${_comps[starship]}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "_brew _dive _starship" ]
 }
 
 @test "the Homebrew prefix is vscode-owned" {
