@@ -13,22 +13,29 @@ setup_file() {
   : "${IMAGE:?set IMAGE to the image tag built by \`npm run build:dev\`}"
 }
 
-# Writes stdin to ~/.docker/config.json as vscode, runs the script with the
-# given shell prelude, and prints the script's output, a separator, then the
-# resulting config (or ABSENT).
-prune() {
+# Seeds ~/.docker/config.json from stdin as vscode, runs the `setup` shell
+# snippet, then docker-prune-credsstore, then the `report` snippet. The
+# default report prints a `---` separator and the resulting config (or
+# ABSENT), which `config_after_separator` extracts.
+prune_stdin_config() {
+  local setup="${1:-}"
+  local report='echo ---; cat "${DOCKER_CONFIG:-$HOME/.docker}/config.json" 2>/dev/null || echo ABSENT'
+  [ $# -lt 2 ] || report="$2"
   docker run --rm -i --user vscode "$IMAGE" sh -c '
     mkdir -p "$HOME/.docker"
     cat > "$HOME/.docker/config.json"
-    '"${1:-}"'
+    '"$setup"'
     docker-prune-credsstore || exit
-    echo ---
-    cat "${DOCKER_CONFIG:-$HOME/.docker}/config.json" 2>/dev/null || echo ABSENT
+    '"$report"'
   '
 }
 
+config_after_separator() {
+  printf '%s\n' "${output#*---$'\n'}"
+}
+
 @test "a credsStore whose helper is not on PATH is removed, other keys kept" {
-  run prune <<'EOF'
+  run prune_stdin_config <<'EOF'
 {
   "auths": { "ghcr.io": {} },
   "credHelpers": { "gcr.io": "gcloud" },
@@ -37,37 +44,48 @@ prune() {
 }
 EOF
   [ "$status" -eq 0 ]
-  config="${output#*---$'\n'}"
   run jq -e '
     (has("credsStore") | not)
     and .auths == { "ghcr.io": {} }
     and .credHelpers == { "gcr.io": "gcloud" }
     and .currentContext == "default"
-  ' <<<"$config"
+  ' < <(config_after_separator)
   [ "$status" -eq 0 ]
 }
 
 @test "removing a credsStore keeps the config's file mode" {
-  run docker run --rm -i --user vscode "$IMAGE" sh -c '
-    mkdir -p "$HOME/.docker"
-    cat > "$HOME/.docker/config.json"
-    chmod 0640 "$HOME/.docker/config.json"
-    docker-prune-credsstore >/dev/null
-    stat -c "%a" "$HOME/.docker/config.json"
+  run prune_stdin_config \
+    'chmod 0640 "$HOME/.docker/config.json"' \
+    'stat -c "%a" "$HOME/.docker/config.json"' \
+    <<<'{ "credsStore": "desktop" }'
+  [ "$status" -eq 0 ]
+  [ "${lines[-1]}" = "640" ]
+}
+
+@test "a symlinked config is edited at its target and stays a symlink" {
+  run prune_stdin_config '
+    mv "$HOME/.docker/config.json" "$HOME/real-config.json"
+    chmod 0600 "$HOME/real-config.json"
+    ln -s "$HOME/real-config.json" "$HOME/.docker/config.json"
+  ' '
+    [ -L "$HOME/.docker/config.json" ] && echo symlink
+    stat -c "%a" "$HOME/real-config.json"
+    jq -e "has(\"credsStore\") | not" "$HOME/real-config.json"
   ' <<<'{ "credsStore": "desktop" }'
   [ "$status" -eq 0 ]
-  [ "$output" = "640" ]
+  [ "${lines[-3]}" = "symlink" ]
+  [ "${lines[-2]}" = "600" ]
 }
 
 @test "removing a credsStore says which helper was missing" {
-  run prune <<<'{ "credsStore": "desktop" }'
+  run prune_stdin_config <<<'{ "credsStore": "desktop" }'
   [ "$status" -eq 0 ]
   [[ "$output" == *"docker-credential-desktop"* ]]
 }
 
 @test "a credsStore whose helper is on PATH is kept, file untouched" {
   input='{"credsStore":"pass"}'
-  run prune '
+  run prune_stdin_config '
     mkdir -p "$HOME/bin"
     printf "#!/bin/sh\n" > "$HOME/bin/docker-credential-pass"
     chmod +x "$HOME/bin/docker-credential-pass"
@@ -80,42 +98,42 @@ $input" ]
 
 @test "a config with no credsStore is left byte-for-byte untouched" {
   input='{"auths":{}}'
-  run prune <<<"$input"
+  run prune_stdin_config <<<"$input"
   [ "$status" -eq 0 ]
   [ "$output" = "---
 $input" ]
 }
 
 @test "DOCKER_CONFIG is honoured over ~/.docker" {
-  run prune '
+  run prune_stdin_config '
     export DOCKER_CONFIG="$HOME/elsewhere"
     mkdir -p "$DOCKER_CONFIG"
     mv "$HOME/.docker/config.json" "$DOCKER_CONFIG/config.json"
   ' <<<'{ "credsStore": "desktop" }'
   [ "$status" -eq 0 ]
-  config="${output#*---$'\n'}"
-  run jq -e 'has("credsStore") | not' <<<"$config"
+  run jq -e 'has("credsStore") | not' < <(config_after_separator)
   [ "$status" -eq 0 ]
 }
 
 @test "with no docker config, it is a no-op that exits 0 and creates nothing" {
-  run prune 'rm -r "$HOME/.docker"' </dev/null
+  run prune_stdin_config 'rm -r "$HOME/.docker"' </dev/null
   [ "$status" -eq 0 ]
   [ "$output" = "---
 ABSENT" ]
 }
 
 @test "an unparseable config fails loudly and is left untouched" {
-  run prune <<<'{ not json'
+  run prune_stdin_config '' \
+    'echo unreachable' \
+    <<<'{ not json'
   [ "$status" -ne 0 ]
+  [[ "$output" != *unreachable* ]]
 
-  run docker run --rm -i --user vscode "$IMAGE" sh -c '
-    mkdir -p "$HOME/.docker"
-    cat > "$HOME/.docker/config.json"
-    docker-prune-credsstore 2>/dev/null
-    cat "$HOME/.docker/config.json"
-  ' <<<'{ not json'
-  [ "$output" = "{ not json" ]
+  run prune_stdin_config \
+    'trap "cat \"\$HOME/.docker/config.json\"" EXIT' \
+    '' \
+    <<<'{ not json'
+  [ "${lines[-1]}" = "{ not json" ]
 }
 
 @test "docker-prune-credsstore is installed to /usr/local/bin" {

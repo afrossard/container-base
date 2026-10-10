@@ -79,9 +79,10 @@ RUN curl -fsSL get.chezmoi.io | sh -s -- -b /usr/local/bin
 COPY dotfiles-bootstrap /usr/local/bin/dotfiles-bootstrap
 RUN chmod 0755 /usr/local/bin/dotfiles-bootstrap
 
-# docker-prune-credsstore is the same shape: consumers on
-# docker-outside-of-docker call it from postStartCommand (issue #205). It
-# leans on the jq the common-utils feature installs.
+# docker-prune-credsstore is opt-in, not universal: only a consumer on
+# docker-outside-of-docker calls it, from postStartCommand beside
+# dotfiles-bootstrap, to drop a host-only credsStore (issue #205). It leans
+# on the jq the common-utils feature installs, pinned by test/dev/dev.bats.
 COPY docker-prune-credsstore /usr/local/bin/docker-prune-credsstore
 RUN chmod 0755 /usr/local/bin/docker-prune-credsstore
 

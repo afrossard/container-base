@@ -8,10 +8,15 @@ set -eu
 # inside the container is left alone.
 config="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
 [ -f "$config" ] || exit 0
+# A symlinked config (say, dotfiles-managed) is edited at its target, so the
+# link survives and the mode copied below is the target's, not the link's.
+config="$(readlink -f "$config")"
 
 store="$(jq -r '.credsStore // empty' "$config")"
 [ -n "$store" ] || exit 0
-! command -v "docker-credential-$store" >/dev/null 2>&1 || exit 0
+if command -v "docker-credential-$store" >/dev/null 2>&1; then
+  exit 0
+fi
 
 # Written beside the config and renamed over it, so a failure leaves the
 # original intact rather than truncated.
