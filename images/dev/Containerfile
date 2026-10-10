@@ -7,10 +7,11 @@ ENV LANG=C.UTF-8
 COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /uvx /bin/
 
 # uv's zsh completions, generated here because evaluating them at shell
-# start costs ~165ms (#210). The directory is on zsh's default fpath.
-RUN mkdir -p /usr/local/share/zsh/site-functions \
-    && uv generate-shell-completion zsh > /usr/local/share/zsh/site-functions/_uv \
-    && uvx --generate-shell-completion zsh > /usr/local/share/zsh/site-functions/_uvx
+# start costs ~165ms (issue #210). The directory is on zsh's default fpath.
+RUN site_functions=/usr/local/share/zsh/site-functions \
+    && mkdir -p "$site_functions" \
+    && uv generate-shell-completion zsh > "$site_functions/_uv" \
+    && uvx --generate-shell-completion zsh > "$site_functions/_uvx"
 
 # mise owns Node and every language added later (ADR-0006), from apt rather
 # than the `mise.run` script, which targets $HOME.
@@ -61,7 +62,7 @@ RUN sed -i \
 # faked around the install. Prefix chowned to vscode afterward. shellenv
 # goes in /etc/zsh/zshenv so non-interactive shells get it too (ADR-0010).
 # `shellenv zsh`, not bare `shellenv`: brew otherwise picks the flavour from
-# the RUN step's sh and omits the fpath line its completions need (#210).
+# the RUN step's sh and omits the fpath line its completions need (issue #210).
 ENV HOMEBREW_PREFIX=/home/linuxbrew/.linuxbrew
 ENV HOMEBREW_NO_ANALYTICS=1
 ENV NONINTERACTIVE=1
