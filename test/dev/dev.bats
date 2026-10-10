@@ -185,6 +185,13 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
+# docker-prune-credsstore (issue #205) needs jq, which the image gets from
+# the common-utils feature (ADR-0005) rather than its own apt-get.
+@test "jq resolves on PATH" {
+  run docker run --rm "$IMAGE" sh -c 'command -v jq'
+  [ "$status" -eq 0 ]
+}
+
 @test "gh, vim and bubblewrap are installed via apt, not hand-rolled" {
   run docker run --rm "$IMAGE" sh -c \
     'dpkg -s gh >/dev/null && dpkg -s vim >/dev/null && dpkg -s bubblewrap >/dev/null'

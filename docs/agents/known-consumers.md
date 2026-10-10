@@ -11,3 +11,7 @@ All five set it, and on this base it prevents `uv` from finding any Python.
 
 Every migration should also expect `docker-outside-of-docker`'s default options to fail on this Debian trixie base: pass `"moby": false` in the feature's options.
 Its default `moby: true` path installs `moby-cli`, which trixie's apt repositories don't carry.
+
+Every migration that uses `docker-outside-of-docker` should call `docker-prune-credsstore` from `postStartCommand`, next to `dotfiles-bootstrap`, and drop any hand-rolled copy of it (issue #205).
+Opened from a macOS host, the container's `~/.docker/config.json` carries `"credsStore": "desktop"`, whose helper the container lacks, so every `docker pull` fails until the key is removed.
+`actual-budget-transformer` carries such a copy in its `.devcontainer/post-start`.

@@ -1,0 +1,29 @@
+#!/bin/sh
+set -eu
+
+# A host's docker config can reach the container carrying a credsStore whose
+# helper only exists on the host - macOS's "desktop" above all - and docker
+# then fails every pull (issue #205). Only a store whose
+# docker-credential-<name> is missing from PATH is removed, so one that works
+# inside the container is left alone.
+config="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+[ -f "$config" ] || exit 0
+# A symlinked config (say, dotfiles-managed) is edited at its target, so the
+# link survives and the mode copied below is the target's, not the link's.
+config="$(readlink -f "$config")"
+
+store="$(jq -r '.credsStore // empty' "$config")"
+[ -n "$store" ] || exit 0
+if command -v "docker-credential-$store" >/dev/null 2>&1; then
+  exit 0
+fi
+
+# Written beside the config and renamed over it, so a failure leaves the
+# original intact rather than truncated.
+tmp="$(mktemp "$config.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+jq 'del(.credsStore)' "$config" > "$tmp"
+chmod "$(stat -c '%a' "$config")" "$tmp"
+mv "$tmp" "$config"
+
+echo "docker-prune-credsstore: removed credsStore \"$store\", docker-credential-$store is not on PATH"
