@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.0.3](https://github.com/afrossard/container-base/compare/4.0.2...4.0.3) (2026-10-10)
+
+
+### Bug Fixes
+
+* **dev:** ship docker-prune-credsstore for macOS-host docker configs ([#208](https://github.com/afrossard/container-base/issues/208)) ([e1bb213](https://github.com/afrossard/container-base/commit/e1bb2134b38f6535607fd00490b0c9058bb4863a))
+
 ## [4.0.2](https://github.com/afrossard/container-base/compare/4.0.1...4.0.2) (2026-10-10)
 
 
