@@ -79,6 +79,12 @@ RUN curl -fsSL get.chezmoi.io | sh -s -- -b /usr/local/bin
 COPY dotfiles-bootstrap /usr/local/bin/dotfiles-bootstrap
 RUN chmod 0755 /usr/local/bin/dotfiles-bootstrap
 
+# docker-prune-credsstore is the same shape: consumers on
+# docker-outside-of-docker call it from postStartCommand (issue #205). It
+# leans on the jq the common-utils feature installs.
+COPY docker-prune-credsstore /usr/local/bin/docker-prune-credsstore
+RUN chmod 0755 /usr/local/bin/docker-prune-credsstore
+
 # gh, vim, bubblewrap ship in Debian's repository (issue #7). gnupg is here
 # to verify Claude Code's signing key below. bubblewrap is required by
 # Claude Code's sandbox mode and was missing from common-utils (ADR-0005).
