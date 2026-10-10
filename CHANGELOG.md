@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.0.4](https://github.com/afrossard/container-base/compare/4.0.3...4.0.4) (2026-10-10)
+
+
+### Bug Fixes
+
+* **dev:** put brew and uv zsh completions on fpath ([#211](https://github.com/afrossard/container-base/issues/211)) ([054b44e](https://github.com/afrossard/container-base/commit/054b44e0b639502435d111e2d73a847ced05e9bd))
+
 ## [4.0.3](https://github.com/afrossard/container-base/compare/4.0.2...4.0.3) (2026-10-10)
 
 
