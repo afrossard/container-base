@@ -4,7 +4,7 @@ These repos currently build FROM upstream images directly and hand-roll the setu
 Once the dev image is published, migrate each devcontainer to `FROM ghcr.io/afrossard/container-base:<version>-dev`:
 
 - **`default-vscode-project`** - `Containerfile` (FROM `python:3.14-slim-trixie`) and `.devcontainer/Containerfile` (FROM `mcr.microsoft.com/devcontainers/python:3-trixie`, hand-rolled Homebrew bootstrap to drop once the dev image covers it).
-- **`homelab-kube`, `homelab-etl`, `homelab-fun`, `actual-budget-transformer`** - the four sibling repos named in dotfiles ADR-0001 as the source of the devcontainer drift this repo exists to fix.
+- **`homelab-etl`, `homelab-fun`, `actual-budget-transformer`** - three of the four sibling repos named in dotfiles ADR-0001 as the source of the devcontainer drift this repo exists to fix; the fourth, `homelab-kube`, migrated in afrossard/homelab-kube#48.
 
 Every migration must delete `UV_PYTHON_DOWNLOADS=0` from `devcontainer.json` (ADR-0006).
 All five set it, and on this base it prevents `uv` from finding any Python.
