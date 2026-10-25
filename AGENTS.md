@@ -4,8 +4,8 @@ Publishes shared container base images (dev, agent, and per-language runtime-bas
 
 ## Domain docs
 
-Single-context: `CONTEXT.md` and `docs/adr/` at the repo root.
-Read `CONTEXT.md` and the ADRs that touch the area you're about to work in (`ls docs/adr/` is the index); record what you resolve there, not in this file.
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root.
+Read `GLOSSARY.md` and the ADRs that touch the area you're about to work in (`ls docs/adr/` is the index); record what you resolve there, not in this file.
 See `docs/agents/domain.md`.
 
 ## Issue tracker

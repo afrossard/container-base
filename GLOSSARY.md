@@ -1,4 +1,4 @@
-# Context
+# Glossary
 
 Glossary for this repo, which publishes shared container base images consumed by other repos' devcontainers and production Containerfiles.
 

@@ -27,7 +27,7 @@ The convergence argument is real and was the reason to consider it, but a produc
 
 ## Consequences
 
-- `CONTEXT.md`'s "every language variant publishes both build variants" is false and has been rewritten. There is no `python-dev`.
+- `GLOSSARY.md`'s "every language variant publishes both build variants" is false and has been rewritten. There is no `python-dev`.
 - Adding a language adds one runtime base, and adds nothing at all to the dev image beyond what its language manager already resolves (ADR-0006).
 - The dev image is larger than any single-language `-dev` image would have been. Accepted: it is a workstation, and one image that is always right beats four that each might not be.
 - Consumers pin a version and Renovate bumps it with no per-repo configuration.
