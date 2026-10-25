@@ -51,7 +51,7 @@ Never hand-create the Release or publish images through a side branch - a hand-c
 
 Renovate opens PRs for third-party dependency bumps; `renovate.json` sets `semanticCommits: "enabled"` and titles them accordingly, but only some of them should release.
 
-A **shipped dependency** (CONTEXT.md) is a third-party artifact baked into a published image - everything Renovate manages under `images/**`.
+A **shipped dependency** (GLOSSARY.md) is a third-party artifact baked into a published image - everything Renovate manages under `images/**`.
 Bumping one changes what a consumer pulls, so it computes a release: `fix(deps): ...` for patch/minor, `feat(deps): ...` for major, as the automated floor.
 Everything else Renovate touches - GitHub Actions, npm tooling, the `.devcontainer` dogfood pin - titles as `chore(deps): ...`: no release, because none of it ships.
 

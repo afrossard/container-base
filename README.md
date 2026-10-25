@@ -35,4 +35,4 @@ Nothing else.
 Both scripts check for `msb` and `git`, stopping with one message if either is missing, so `--help` still works on a machine with neither.
 Everything else the images need ships inside them, and `npm ci` supplies the test tooling.
 
-See [`CONTEXT.md`](./CONTEXT.md) for the glossary and [`docs/adr/`](./docs/adr/) for why it's shaped this way.
+See [`GLOSSARY.md`](./GLOSSARY.md) for the glossary and [`docs/adr/`](./docs/adr/) for why it's shaped this way.

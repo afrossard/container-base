@@ -28,7 +28,7 @@ This host has 4 CPUs and ~3.8 GB RAM and no reliable buildx, and issue #72 itsel
 - The workflow files under `.github/workflows/` (`dev-image.yml`, `agent-image.yml`, `release.yml`) and the composite `.github/actions/setup/action.yml`.
 - Real GitHub Actions run logs and per-step timings, pulled via `gh api repos/afrossard/container-base/actions/runs/<id>/jobs` and `.../timing`, for PR builds and for the last three releases that actually published (`0.3.1`, `0.4.0`, `0.4.1`).
 - `package.json`'s `build:*`/`publish:*` scripts, `images/dev/Containerfile`, `images/agent/Containerfile`, both `devcontainer.json` files, `images/dev/mise/config.toml`, and `.github/scripts/tag-agent-base.sh`.
-- ADRs [0003](../adr/0003-two-axis-tag-matrix.md), [0004](../adr/0004-one-dev-image-and-an-asymmetric-tag-scheme.md), [0006](../adr/0006-language-managers-not-baked-runtimes.md), [0008](../adr/0008-mise-installs-system-wide.md), [0014](../adr/0014-the-agent-runtime-is-a-published-image-variant.md), [0018](../adr/0018-a-merge-cuts-the-release-and-publishes-both-variants.md), [0020](../adr/0020-the-dev-image-bakes-a-default-node-via-mise.md); `CONTEXT.md`; `CONTRIBUTING.md`; `docs/agents/gotchas.md`.
+- ADRs [0003](../adr/0003-two-axis-tag-matrix.md), [0004](../adr/0004-one-dev-image-and-an-asymmetric-tag-scheme.md), [0006](../adr/0006-language-managers-not-baked-runtimes.md), [0008](../adr/0008-mise-installs-system-wide.md), [0014](../adr/0014-the-agent-runtime-is-a-published-image-variant.md), [0018](../adr/0018-a-merge-cuts-the-release-and-publishes-both-variants.md), [0020](../adr/0020-the-dev-image-bakes-a-default-node-via-mise.md); `GLOSSARY.md`; `CONTRIBUTING.md`; `docs/agents/gotchas.md`.
 - The bundled `@devcontainers/cli` 0.89.0: `devcontainer build --help`, and its compiled source (`dist/spec-node/devContainersSpecCLI.js`) for how it passes `--cache-from`/`--cache-to` and `BUILDKIT_INLINE_CACHE` through to buildx.
 
 Every number below that was read off a real run is stated as measured.
@@ -220,7 +220,7 @@ The `@devcontainers/cli` 0.89.0 wrapper (verified in its compiled source):
 
 The Containerfile's own comments show this is deliberate: _"apt installs don't auto-update, correct for a versioned base image"_ next to the Claude Code install.
 Each published `X-dev` is meant to be a point-in-time capture, and full-rebuild-every-time is what makes that true without any lockfile machinery.
-For an image whose entire purpose is to be the trusted base other repos build their devcontainers and CI on (ADR-0001, ADR-0004, `CONTEXT.md` "shipped dependency"), that property is load-bearing.
+For an image whose entire purpose is to be the trusted base other repos build their devcontainers and CI on (ADR-0001, ADR-0004, `GLOSSARY.md` "shipped dependency"), that property is load-bearing.
 
 A layer cache breaks it in the direction that is hardest to notice.
 Under Option A/C on `publish:dev`, a Containerfile edit to layer 9 keeps layers 4/6/7 frozen at whenever they last rebuilt - which, across a run of pin bumps that all invalidate from the top, might be recent, but across a run of trailing-layer edits could be many releases and weeks stale.

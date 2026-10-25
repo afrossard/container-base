@@ -12,7 +12,7 @@ And a per-container-VM tool that consumes OCI images boots one directly as a VM 
 ## Consequences
 
 - **ADR-0004's asymmetric tag scheme absorbs this without combinatorics.** `agent` is unqualified by language, exactly like `dev`; only runtime bases keep the language axis. Adding a language still adds one runtime base and nothing else.
-- **`CONTEXT.md`'s image-tag entry gains a variant**, and the publish workflow gains one build, not a new package.
+- **`GLOSSARY.md`'s image-tag entry gains a variant**, and the publish workflow gains one build, not a new package.
 - **The agent never needs registry-push credentials.** It builds and tests images; CI publishes them, as it does today.
 - **ADR-0011 narrows rather than reverses.** Its conclusion - that hardening is composed by whoever launches, and the image ships enabling machinery rather than active policy - is unchanged and applies to the agent runtime image too.
 - **Whether this image is published from this repo long-term is still open.** It is an image, and images are what this repo publishes, which is the argument for keeping it here; if the runtime grows parts that are not image-shaped, that argument weakens.
