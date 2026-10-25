@@ -23,7 +23,7 @@ The `--secret` / `--on-secret-violation` passthrough remains for other credentia
 
 ## Consequences
 
-- **A shallow clone is not an option.** `git merge-base` backs this repo's own `/code-review` skill, and history is what an agent reads to understand a change. The clone is full.
+- **A shallow clone is not an option.** `git merge-base` backs the `/code-review` skill, and history is what an agent reads to understand a change. The clone is full.
 - **The launcher composes the clone, not the image.** ADR-0011's rule is that the image ships enabling machinery while the launcher composes policy, and "which repo, at which path" is policy. It also keeps a clone failure from becoming a boot failure for an image other consumers may launch differently.
 - **Cloning needs no credential, and that is load-bearing.** Both this repo and the operator's `dotfiles` are public. A repo-scoped token could not clone a private `dotfiles`, so the moment either repo goes private the credential model needs revisiting, not just widening.
 - **The credential boundary is made to coincide with the runtime boundary.** `GLOSSARY.md` defines the agent runtime as holding one repo and nothing else; a credential reaching further would mean the runtime's real boundary is larger than its stated one.
