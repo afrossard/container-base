@@ -285,6 +285,15 @@ reset_bare() {
   grep -A1 -Fx -- "--" "$MSB_ARGS_FILE" | grep -Fxq -- "true"
 }
 
+# Issue #222: the docker-in-docker feature's containerd keeps image layers
+# under /var/lib/containerd, so that is the path that must not nest
+# overlayfs on the guest's overlayfs root (docs/research/0022, ADR-0023).
+@test "the create path mounts the disk-backed docker volume where containerd keeps image layers" {
+  run launch
+  [ "$status" -eq 0 ]
+  has_flag_value "--mount-named" "test-session-docker-data:/var/lib/containerd:kind=disk,size=20G"
+}
+
 @test "the create path still forwards the clone URL and dotfiles repo as env" {
   run launch
   [ "$status" -eq 0 ]

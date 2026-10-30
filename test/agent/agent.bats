@@ -4,7 +4,8 @@
 # through the door a user walks through).
 #
 # A `docker run` nests this image's dockerd inside an already-overlayfs
-# container, so /var/lib/docker needs its own filesystem (docs/research/0022);
+# container, so /var/lib/containerd, where the docker-in-docker feature's
+# containerd keeps image layers, needs its own filesystem (docs/research/0022);
 # a scratch docker volume stands in for msb's disk-backed mount. --privileged
 # substitutes for a real launch profile's capabilities.
 #
@@ -29,7 +30,7 @@ teardown() {
 # docker-init.sh prints startup chatter to the same stream, so assertions
 # match a substring rather than the whole of $output.
 @test "an explicit command runs and its output comes through" {
-  run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" echo hello
+  run docker run --rm --privileged -v "${volume}:/var/lib/containerd" "$IMAGE" echo hello
   [ "$status" -eq 0 ]
   [[ "$output" == *"hello"* ]]
 }
@@ -39,27 +40,27 @@ teardown() {
 # leaking a "grep: No such file or directory" line. Never fired under msb,
 # where /tmp is already a mountpoint; this suite's docker run catches it.
 @test "no entrypoint plumbing (grep/log-file errors) leaks into the output" {
-  run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" echo hello
+  run docker run --rm --privileged -v "${volume}:/var/lib/containerd" "$IMAGE" echo hello
   [ "$status" -eq 0 ]
   [[ "$output" != *"No such file or directory"* ]]
   [[ "$output" != *"grep:"* ]]
 }
 
 @test "the given command runs as vscode, not root, and can reach the docker socket without sudo" {
-  run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" id
+  run docker run --rm --privileged -v "${volume}:/var/lib/containerd" "$IMAGE" id
   [ "$status" -eq 0 ]
   [[ "$output" == *"uid=1000(vscode) gid=1000(vscode) groups=1000(vscode),999(docker)"* ]]
 }
 
 @test "no command given fails rather than falling back to a default" {
-  run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE"
+  run docker run --rm --privileged -v "${volume}:/var/lib/containerd" "$IMAGE"
   [ "$status" -ne 0 ]
   [[ "$output" == *"no default command"* ]]
 }
 
 @test "the container exits when the given command exits, with no lingering process" {
   name="agent-lingering-test-$$"
-  docker run -d --privileged -v "${volume}:/var/lib/docker" --name "$name" "$IMAGE" \
+  docker run -d --privileged -v "${volume}:/var/lib/containerd" --name "$name" "$IMAGE" \
     sh -c 'sleep 1; echo done' >/dev/null
 
   run docker wait "$name"
@@ -74,14 +75,14 @@ teardown() {
 }
 
 @test "dockerd starts with overlayfs storage, not a vfs fallback" {
-  run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" \
+  run docker run --rm --privileged -v "${volume}:/var/lib/containerd" "$IMAGE" \
     sh -c 'docker info --format "{{.Driver}}"'
   [ "$status" -eq 0 ]
   [[ "$output" == *"overlayfs"* ]]
 }
 
 @test "a real container run succeeds inside the guest" {
-  run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" sh -c '
+  run docker run --rm --privileged -v "${volume}:/var/lib/containerd" "$IMAGE" sh -c '
     set -e
     docker run --rm alpine echo container-ok
   '
@@ -94,7 +95,7 @@ teardown() {
 # the snapshotter.
 @test "a real multi-layer docker build succeeds inside the guest" {
   run docker run --rm --privileged \
-    -v "${volume}:/var/lib/docker" \
+    -v "${volume}:/var/lib/containerd" \
     -v "${BATS_TEST_DIRNAME}/fixtures/multilayer:/build:ro" \
     "$IMAGE" sh -c '
       set -e
@@ -112,7 +113,7 @@ teardown() {
 # the boot with "failed to create TTRPC connection: unsupported protocol:
 # Yunix".
 @test "the docker engine packages are held against in-session upgrades" {
-  run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" apt-mark showhold
+  run docker run --rm --privileged -v "${volume}:/var/lib/containerd" "$IMAGE" apt-mark showhold
   [ "$status" -eq 0 ]
   [[ "$output" == *"containerd.io"* ]]
   [[ "$output" == *"docker-ce"* ]]
@@ -122,7 +123,7 @@ teardown() {
 # The regression test proper for #66: a real upgrade, then a real
 # container, so it goes red on the bug itself, not just on the hold.
 @test "a docker run still works after an in-session apt upgrade" {
-  run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" sh -c '
+  run docker run --rm --privileged -v "${volume}:/var/lib/containerd" "$IMAGE" sh -c '
     set -e
     sudo apt-get update -qq >/dev/null
     sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq >/dev/null
@@ -133,7 +134,7 @@ teardown() {
 }
 
 @test "tini is PID 1, reaping dockerd" {
-  run docker run --rm --privileged -v "${volume}:/var/lib/docker" "$IMAGE" \
+  run docker run --rm --privileged -v "${volume}:/var/lib/containerd" "$IMAGE" \
     sh -c 'ps -o pid,comm -p 1'
   [ "$status" -eq 0 ]
   [[ "$output" == *"tini"* ]]

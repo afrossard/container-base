@@ -52,7 +52,7 @@
 # /home/vscode/git/<repo> (the same convention the tooling repo clone
 # lands under, per the host's own ~/git/<repo> layout).
 #
-# Each runtime gets a disk-backed /var/lib/docker volume named
+# Each runtime gets a disk-backed /var/lib/containerd volume named
 # <runtime name>-docker-data - derived from the name, so --reset and
 # cleanup-agent-sessions can always find it. Pre-create it yourself to
 # control its placement; otherwise the launcher creates it.
@@ -320,7 +320,7 @@ exec msb run "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
   --net public \
   "${secrets[@]}" \
   "${violation_flag[@]}" \
-  --mount-named "${docker_volume}:/var/lib/docker:kind=disk,size=${DOCKER_DATA_SIZE}" \
+  --mount-named "${docker_volume}:/var/lib/containerd:kind=disk,size=${DOCKER_DATA_SIZE}" \
   --env "WORKSPACE_CLONE_URL=${clone_url}" \
   --env "DOTFILES_REPO=${DOTFILES_REPO:-}" \
   --env "TOOLING_REPO=${TOOLING_REPO}" \

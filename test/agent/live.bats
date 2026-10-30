@@ -44,7 +44,7 @@ exec_in() {
   # Create. `sleep` keeps the runtime up; the entrypoint still runs
   # agent-bringup first, so this is a real first boot.
   msb run --no-tty --name "$LIVE_NAME" --net public \
-    --mount-named "${LIVE_DOCKER_VOL}:/var/lib/docker:kind=disk,size=10G" \
+    --mount-named "${LIVE_DOCKER_VOL}:/var/lib/containerd:kind=disk,size=10G" \
     "$MSB_LIVE_IMAGE" -- sleep 3600 &
   local run_pid=$!
 
