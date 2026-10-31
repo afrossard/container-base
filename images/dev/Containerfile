@@ -28,6 +28,10 @@ COPY mise/config.toml /etc/mise/config.toml
 # ca-certificates, curl and git are for the Homebrew installer below, in
 # this layer to share one apt-get with the base tooling.
 #
+# libatomic1 is linked by Node 26+'s upstream Linux binaries and absent
+# from trixie-slim (issue #223); without it every `mise install` of Node 26
+# fails, baked pin or project pin alike.
+#
 # `mise install` with no arguments bakes the system-config pin (ADR-0020)
 # into the shared vscode-owned data directory. chown runs after, as root.
 RUN apt-get update \
@@ -36,6 +40,7 @@ RUN apt-get update \
         curl \
         extrepo \
         git \
+        libatomic1 \
         sudo \
         zsh \
     && extrepo enable mise \
