@@ -4,7 +4,7 @@ ENV LANG=C.UTF-8
 
 # uv owns the Python interpreter (ADR-0006). COPY --from avoids the shell
 # installer's $HOME writes.
-COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /uvx /bin/
 
 # uv's zsh completions, generated here because evaluating them at shell
 # start costs ~165ms (issue #210). The directory is on zsh's default fpath.
