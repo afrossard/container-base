@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.0.0](https://github.com/afrossard/container-base/compare/4.0.4...5.0.0) (2026-10-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* **agent:** an existing agent runtime keeps its docker volume at /var/lib/docker, so it must be reset (`launch-agent-runtime --reset`) before it can use an image from this release; until then every docker run and build inside it fails.
+
+### Bug Fixes
+
+* **agent:** pick the nested dockerd iptables backend at boot ([#224](https://github.com/afrossard/container-base/issues/224)) ([d07abfc](https://github.com/afrossard/container-base/commit/d07abfc10d6046dbb5bf2267415fa24834daa4bc))
+* **deps:** update ghcr.io/astral-sh/uv docker tag to v0.13.6 ([#216](https://github.com/afrossard/container-base/issues/216)) ([6beba1b](https://github.com/afrossard/container-base/commit/6beba1b78cf571f32bcc24768a94f84cd272483b))
+
 ## [4.0.4](https://github.com/afrossard/container-base/compare/4.0.3...4.0.4) (2026-10-10)
 
 
