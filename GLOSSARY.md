@@ -67,7 +67,7 @@ _Avoid_: agent runtime - that names the running VM this image becomes once launc
 
 **Launcher**:
 `scripts/launch-agent-runtime`, the host-side script that owns the agent runtime's lifecycle: by default it attaches to the repo's existing runtime, resuming it if stopped and creating it only if absent, and it resets one only on an explicit, confirmed flag (ADR-0021).
-It composes what the image deliberately does not carry: the disk-backed `/var/lib/docker` volume (msb's default nests overlayfs on overlayfs, which fails a real build), the workspace clone, and the `dotfiles-bootstrap` run (ADR-0016).
+It composes what the image deliberately does not carry: the disk-backed `/var/lib/containerd` volume that holds docker's image layers (msb's default nests overlayfs on overlayfs, which fails a real build), the workspace clone, and the `dotfiles-bootstrap` run (ADR-0016).
 When given no command it supplies an interactive shell with a real tty, so a bare invocation behaves like opening a devcontainer.
 `scripts/cleanup-agent-sessions` removes only what it is explicitly told to - under ADR-0021 a stopped runtime is a normal state, not litter.
 Both are host-side tooling, not images - a narrow, documented exception to this repo's image-only scope (ADR-0001, ADR-0014).
