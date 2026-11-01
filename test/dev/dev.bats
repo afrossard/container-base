@@ -118,6 +118,22 @@ setup_file() {
   [[ "$output" != *"OUTSIDE_PROJECT=v22"* ]]
 }
 
+# Node 26's upstream Linux binaries link libatomic.so.1, which trixie-slim
+# doesn't ship (issue #223). Pinned at 26 rather than the baked default so
+# a project on a newer Node than the image bakes is still covered.
+@test "a project pinning Node 26 installs and runs it" {
+  run docker run --rm --user vscode "$IMAGE" zsh -lc '
+    set -e
+    mkdir -p /tmp/proj && cd /tmp/proj
+    printf "[tools]\nnode = \"26\"\n" > .mise.toml
+    mise trust >/dev/null
+    mise install 2>&1
+    node --version
+  '
+  [ "$status" -eq 0 ]
+  [[ "${lines[-1]}" == v26.* ]]
+}
+
 # ADR-0008's chown makes the shared data directory vscode-owned, so a
 # global npm install under the baked Node writes there with no sudo.
 @test "a global npm install under the baked Node needs no sudo and lands in the shared data dir" {
