@@ -58,14 +58,16 @@ fingerprint = "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE"
 # The packages step upgrades only the declared names, not their dependencies
 # or the base layer, so a full upgrade follows.
 #
-# None of the floating mise tools ship zsh completion files, and evaluating
-# them at shell start is slow (~165ms for uv alone, issue #210), so they are
-# generated here into a directory on zsh's default fpath. Here rather than
-# once at build, so they never lag behind an in-place upgrade.
+# Neither mise's apt package (issue #215) nor the floating mise tools ship
+# zsh completion files, and evaluating them at shell start is slow (~165ms
+# for uv alone, issue #210), so they are generated here into a directory on
+# zsh's default fpath. Here rather than once at build, so they never lag
+# behind an in-place upgrade.
 [tasks.bootstrap]
 run = [
   "sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get full-upgrade -y",
   "sudo install -d /usr/local/share/zsh/site-functions",
+  "mise completion zsh | sudo tee /usr/local/share/zsh/site-functions/_mise >/dev/null",
   "uv generate-shell-completion zsh | sudo tee /usr/local/share/zsh/site-functions/_uv >/dev/null",
   "uvx --generate-shell-completion zsh | sudo tee /usr/local/share/zsh/site-functions/_uvx >/dev/null",
   "gh completion -s zsh | sudo tee /usr/local/share/zsh/site-functions/_gh >/dev/null",
