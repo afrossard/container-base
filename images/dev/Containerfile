@@ -3,8 +3,8 @@ FROM debian:trixie-slim
 ENV LANG=C.UTF-8
 
 # Only the platform and Node are pinned; every tool floats (ADR-0024).
-# The shipped mise system config is the one declaration of what floats, and
-# this file keeps only the package sources it installs from.
+# The shipped mise system config is the one declaration of what floats and
+# where it comes from; this file keeps only the source mise itself comes from.
 #
 # mise owns Node and every language added later (ADR-0006), installed
 # system-wide into a shared data directory (ADR-0008).
@@ -19,18 +19,16 @@ ENV PATH=${MISE_DATA_DIR}/shims:${PATH}
 # resolves outside any project while a project .mise.toml still wins.
 COPY mise/config.toml /etc/mise/config.toml
 
-# The package sources, then everything else from the shipped config.
+# mise, then everything else from the shipped config.
 #
 # mise comes from its extrepo source, and is installed here because
-# `mise bootstrap` cannot install itself. Claude Code comes from Anthropic's
-# signed apt repository, `stable` channel: the native installer writes into
-# ~/.local, the one directory this image must leave alone, and
-# `claude-code` is a Homebrew cask (unsupported on Linux). The key's
-# fingerprint is checked against Anthropic's published one first.
+# `mise bootstrap` cannot install itself. curl stays for the Homebrew
+# installer below.
 #
-# `mise bootstrap --yes` then installs the declared apt packages, the
-# tools (baking the Node pin and the floating tools into the shared data
-# directory) and runs the `bootstrap` task, whose full upgrade brings the
+# `mise bootstrap --yes` then adds the declared apt sources (Anthropic's,
+# key fingerprint checked), installs the declared apt packages and the tools
+# (baking the Node pin and the floating tools into the shared data
+# directory), and runs the `bootstrap` task, whose full upgrade brings the
 # base layer current. It runs as root here, so the data directory is
 # chowned to vscode after (ADR-0008), and root's caches and state - gh's
 # telemetry device id among them - are dropped rather than baked.
@@ -39,22 +37,13 @@ RUN apt-get update \
         ca-certificates \
         curl \
         extrepo \
-        gnupg \
     && extrepo enable mise \
-    && install -d -m 0755 /etc/apt/keyrings \
-    && curl -fsSL https://downloads.claude.ai/keys/claude-code.asc \
-        -o /etc/apt/keyrings/claude-code.asc \
-    && fingerprint="$(gpg --show-keys --with-colons --with-fingerprint /etc/apt/keyrings/claude-code.asc \
-        | awk -F: '$1 == "fpr" { print $10; exit }')" \
-    && [ "$fingerprint" = "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE" ] \
-    && echo "deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" \
-        > /etc/apt/sources.list.d/claude-code.list \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mise \
     && mkdir -p "$MISE_DATA_DIR" \
     && mise bootstrap --yes \
     && chown -R 1000:1000 "$MISE_DATA_DIR" \
-    && rm -rf /var/lib/apt/lists/* /root/.gnupg /root/.cache /root/.local
+    && rm -rf /var/lib/apt/lists/* /root/.cache /root/.local
 
 # sudo and zsh, which the edits below need, come from the shipped config's
 # [bootstrap.packages] installed above.

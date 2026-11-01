@@ -9,7 +9,7 @@ uv was the only tool driving that cascade; claude-code, gh, starship and dive al
 
 - **Pinned**: the `debian:trixie-slim` release and the default Node major (ADR-0020). Renovate bumps them and they change only through an image release.
 - **Floating**: everything else. No version is declared in this repo; the image carries whatever its install source offered at build time, as a floor, and every build also runs a full Debian upgrade so the base layer is current trixie.
-- **One declaration**: the shipped mise system config, `/etc/mise/config.toml`, lists the Node pin, every floating mise tool under `[tools]`, every floating apt package under `[bootstrap.packages]`, and a `bootstrap` task running `apt-get full-upgrade`. The build installs from it with `mise bootstrap --yes`; the Containerfile keeps only the package sources (the mise extrepo, Anthropic's apt repo and its key check, the Homebrew installer) and what adding them takes (`ca-certificates`, `curl`, `extrepo`, `gnupg`).
+- **One declaration**: the shipped mise system config, `/etc/mise/config.toml`, lists the Node pin, every floating mise tool under `[tools]`, every floating apt package under `[bootstrap.packages]`, Anthropic's apt repository and its key fingerprint under `[bootstrap.apt.sources]`, and a `bootstrap` task running `apt-get full-upgrade`. The build installs from it with `mise bootstrap --yes`; the Containerfile keeps only the sources mise cannot declare (the mise extrepo, since mise must be installed to read the config, and the Homebrew installer) and what adding them takes (`ca-certificates`, `curl`, `extrepo`).
 - **One upgrade command**: `mise bootstrap --upgrade`, run by hand. It is never run automatically on attach or start, because bringup is fast, idempotent convergence (ADR-0021) and an upgrade is neither.
 
 Which installer a floating tool gets turns on whether its own release cadence matters:
@@ -66,3 +66,11 @@ claude-code does not self-update: apt installs don't.
 - **Completions follow the upgrade.** None of the floating mise tools ship zsh completion files, so the `bootstrap` task regenerates them (issue #210's reason for not evaluating them at shell start still holds). Generated once at build instead, they would lag every in-place upgrade.
 - **The floor goes stale between merges.** There is no scheduled rebuild; a fresh environment from an old image is one command away from current. Revisit if stale-floor starts become a real annoyance.
 - **Glossary**: _pinned_ and _floating_ are defined there.
+- **Amended: Anthropic's apt repository moved into the shipped config (issue #231).**
+  The Containerfile first added it by hand: it downloaded the key, checked its fingerprint with `gpg` and wrote `claude-code.list`.
+  mise's own `[bootstrap.apt.sources]` now declares it.
+  mise keeps only a key matching the declared fingerprint, and when none matches, or the key can't be fetched, it fails the build and writes no source.
+  It embeds the key in the `Signed-By` of `/etc/apt/sources.list.d/mise-claude-code.sources`, so the key is trusted for that repository only, and it needs no `gnupg` to do so.
+  Every `mise bootstrap` rewrites that source, the upgrade included, so the upgrade also repairs it or picks up a rotated key.
+  No runtime needs migrating: the old `.list` and the config declaring the new source both live in the image, so a runtime or devcontainer holds one or the other until a reset (ADR-0021) or a rebuild replaces both.
+  That matters, because the two side by side carry different `Signed-By` values and break every `apt-get update`.
