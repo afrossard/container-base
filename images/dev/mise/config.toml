@@ -44,10 +44,8 @@ dive = "latest"
 # Anthropic's signed apt repository, `stable` channel, for apt:claude-code
 # (issue #231). The native installer writes into ~/.local, the one directory
 # this image must leave alone, and `claude-code` is a Homebrew cask
-# (unsupported on Linux). mise keeps only a key matching the fingerprint, fails
-# if none does, and embeds it in the source's Signed-By, so it is trusted for
-# this repository only. Every `mise bootstrap` rewrites the source, so the
-# upgrade also repairs it and picks up a rotated key.
+# (unsupported on Linux). mise fails unless the key matches the fingerprint
+# (ADR-0024).
 [bootstrap.apt.sources.claude-code]
 uris = "https://downloads.claude.ai/claude-code/apt/stable"
 suites = "stable"

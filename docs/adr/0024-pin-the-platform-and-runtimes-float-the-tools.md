@@ -69,8 +69,8 @@ claude-code does not self-update: apt installs don't.
 - **Amended: Anthropic's apt repository moved into the shipped config (issue #231).**
   The Containerfile first added it by hand: it downloaded the key, checked its fingerprint with `gpg` and wrote `claude-code.list`.
   mise's own `[bootstrap.apt.sources]` now declares it.
-  mise keeps only a key matching the declared fingerprint, and when none matches it fails the build and writes no source.
+  mise keeps only a key matching the declared fingerprint, and when none matches, or the key can't be fetched, it fails the build and writes no source.
   It embeds the key in the `Signed-By` of `/etc/apt/sources.list.d/mise-claude-code.sources`, so the key is trusted for that repository only, and it needs no `gnupg` to do so.
   Every `mise bootstrap` rewrites that source, the upgrade included, so the upgrade also repairs it or picks up a rotated key.
-  No runtime needs migrating: the old `.list` and the config declaring the new source both live in the image, so a runtime holds one or the other until a reset replaces both (ADR-0021).
+  No runtime needs migrating: the old `.list` and the config declaring the new source both live in the image, so a runtime or devcontainer holds one or the other until a reset (ADR-0021) or a rebuild replaces both.
   That matters, because the two side by side carry different `Signed-By` values and break every `apt-get update`.

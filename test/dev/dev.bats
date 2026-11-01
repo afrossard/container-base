@@ -312,7 +312,8 @@ $shims/dive" ]
 
 # The key is embedded in the source's Signed-By, so it is trusted for that
 # repository only. deb822 indents a multi-line field by one space and writes
-# its blank lines as " .".
+# its blank lines as " .". gpg comes from the common-utils feature
+# (ADR-0005), not the Containerfile.
 @test "Claude Code's apt key, embedded in its source, matches Anthropic's published fingerprint" {
   run docker run --rm "$IMAGE" sh -c "
     sed -n '/^Signed-By:/,/END PGP PUBLIC KEY BLOCK/{/^ /p}' /etc/apt/sources.list.d/mise-claude-code.sources \
@@ -324,8 +325,8 @@ $shims/dive" ]
   [ "$output" = "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE" ]
 }
 
-# The upgrade command rewrites the source, so it repairs a broken or rotated
-# key in place, as vscode with no TTY.
+# Issue #231: ADR-0024's upgrade command rewrites the source, so it repairs a
+# broken or rotated key in place, as vscode with no TTY.
 @test "mise bootstrap --upgrade restores a deleted Claude Code apt source" {
   run docker run --rm --user vscode "$IMAGE" sh -c '
     set -e
@@ -338,8 +339,9 @@ $shims/dive" ]
   [ "$output" = "URIs: https://downloads.claude.ai/claude-code/apt/stable" ]
 }
 
-# Two sources for the same repository with different Signed-By values make
-# every `apt-get update` fail with "The list of sources could not be read".
+# Issue #231: two sources for the same repository with different Signed-By
+# values make every `apt-get update` fail with "The list of sources could not
+# be read".
 @test "Anthropic's repository has exactly one apt source and no separate keyring" {
   run docker run --rm "$IMAGE" sh -c \
     'grep -rl downloads.claude.ai /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; [ ! -e /etc/apt/keyrings/claude-code.asc ]'
