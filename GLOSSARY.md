@@ -40,6 +40,16 @@ A third-party artifact baked into a published image, so bumping it changes what 
 Dependencies that serve only this repo's own build or CI are not shipped dependencies, and their bumps change nothing consumers observe.
 _Avoid_: runtime dependency - nothing here runs at consumer runtime; the distinction is what ships, not what runs.
 
+**Pinned**:
+A shipped dependency whose version this repo declares, so Renovate bumps it and it changes only through an image release.
+Only the platform and the language runtimes are pinned: the base distribution release and the default language runtime.
+_Avoid_: locked - that names a lockfile mechanism, not the policy.
+
+**Floating**:
+A shipped dependency with no version declared anywhere in this repo: every tool and language manager.
+It resolves to the newest release its install source offers when the image is built - Debian's for an apt package, upstream's for a mise tool - which makes the image a floor rather than a ceiling, and is brought current in place afterwards rather than by a new image.
+_Avoid_: unpinned - a negative definition; latest - a tag name, easily confused with the mechanism.
+
 **Host prerequisite**:
 A tool the operator installs on their own machine so this repo's host-side scripts run: the tap-installed launcher (`brew install afrossard/tap/agent-runtime`), `msb`, and `git`, and nothing else.
 Not a shipped dependency: no image carries it and no `npm ci` supplies it.
