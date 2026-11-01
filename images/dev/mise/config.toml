@@ -25,11 +25,11 @@ starship = "latest"
 dive = "latest"
 
 # Floating apt packages (ADR-0024). claude-code comes from Anthropic's signed
-# repository and mise from the extrepo source, both added by the Containerfile;
-# mise cannot install itself, so it is declared only so the upgrade covers it.
-# zsh and sudo must exist before the Containerfile's /etc/zsh/zshenv and
-# /etc/sudoers edits. libatomic1 is linked by Node 26+'s upstream Linux
-# binaries and absent from trixie-slim (issue #223).
+# repository, declared below. mise comes from the extrepo source the
+# Containerfile adds, because mise cannot install itself; it is declared only
+# so the upgrade covers it. zsh and sudo must exist before the Containerfile's
+# /etc/zsh/zshenv and /etc/sudoers edits. libatomic1 is linked by Node 26+'s
+# upstream Linux binaries and absent from trixie-slim (issue #223).
 [bootstrap.packages]
 "apt:mise" = "latest"
 "apt:claude-code" = "latest"
@@ -40,6 +40,20 @@ dive = "latest"
 "apt:zsh" = "latest"
 "apt:sudo" = "latest"
 "apt:libatomic1" = "latest"
+
+# Anthropic's signed apt repository, `stable` channel, for apt:claude-code
+# (issue #231). The native installer writes into ~/.local, the one directory
+# this image must leave alone, and `claude-code` is a Homebrew cask
+# (unsupported on Linux). mise keeps only a key matching the fingerprint, fails
+# if none does, and embeds it in the source's Signed-By, so it is trusted for
+# this repository only. Every `mise bootstrap` rewrites the source, so the
+# upgrade also repairs it and picks up a rotated key.
+[bootstrap.apt.sources.claude-code]
+uris = "https://downloads.claude.ai/claude-code/apt/stable"
+suites = "stable"
+components = "main"
+key = "https://downloads.claude.ai/keys/claude-code.asc"
+fingerprint = "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE"
 
 # Runs last on every `mise bootstrap`, after the tools are current.
 #

@@ -300,17 +300,51 @@ $shims/starship
 $shims/dive" ]
 }
 
+# Issue #231: the shipped mise config declares Anthropic's repository, and
+# mise writes its source.
 @test "Claude Code is installed from the signed apt repository, stable channel" {
-  run docker run --rm "$IMAGE" sh -c 'dpkg -s claude-code >/dev/null && cat /etc/apt/sources.list.d/claude-code.list'
+  run docker run --rm "$IMAGE" sh -c 'dpkg -s claude-code >/dev/null && cat /etc/apt/sources.list.d/mise-claude-code.sources'
   [ "$status" -eq 0 ]
-  [[ "$output" == *"downloads.claude.ai/claude-code/apt/stable stable main"* ]]
+  [[ "$output" == *"URIs: https://downloads.claude.ai/claude-code/apt/stable"* ]]
+  [[ "$output" == *"Suites: stable"* ]]
+  [[ "$output" == *"Components: main"* ]]
 }
 
-@test "Claude Code's apt key fingerprint matches Anthropic's published fingerprint" {
-  run docker run --rm "$IMAGE" sh -c \
-    "gpg --show-keys --with-colons --with-fingerprint /etc/apt/keyrings/claude-code.asc 2>/dev/null | awk -F: '\$1 == \"fpr\" { print \$10; exit }'"
+# The key is embedded in the source's Signed-By, so it is trusted for that
+# repository only. deb822 indents a multi-line field by one space and writes
+# its blank lines as " .".
+@test "Claude Code's apt key, embedded in its source, matches Anthropic's published fingerprint" {
+  run docker run --rm "$IMAGE" sh -c "
+    sed -n '/^Signed-By:/,/END PGP PUBLIC KEY BLOCK/{/^ /p}' /etc/apt/sources.list.d/mise-claude-code.sources \
+      | sed 's/^ //; s/^\.\$//' \
+      | gpg --show-keys --with-colons --with-fingerprint 2>/dev/null \
+      | awk -F: '\$1 == \"fpr\" { print \$10; exit }'
+  "
   [ "$status" -eq 0 ]
   [ "$output" = "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE" ]
+}
+
+# The upgrade command rewrites the source, so it repairs a broken or rotated
+# key in place, as vscode with no TTY.
+@test "mise bootstrap --upgrade restores a deleted Claude Code apt source" {
+  run docker run --rm --user vscode "$IMAGE" sh -c '
+    set -e
+    cd /tmp
+    sudo rm /etc/apt/sources.list.d/mise-claude-code.sources
+    mise bootstrap --upgrade --yes >/dev/null 2>&1
+    grep "^URIs:" /etc/apt/sources.list.d/mise-claude-code.sources
+  '
+  [ "$status" -eq 0 ]
+  [ "$output" = "URIs: https://downloads.claude.ai/claude-code/apt/stable" ]
+}
+
+# Two sources for the same repository with different Signed-By values make
+# every `apt-get update` fail with "The list of sources could not be read".
+@test "Anthropic's repository has exactly one apt source and no separate keyring" {
+  run docker run --rm "$IMAGE" sh -c \
+    'grep -rl downloads.claude.ai /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; [ ! -e /etc/apt/keyrings/claude-code.asc ]'
+  [ "$status" -eq 0 ]
+  [ "$output" = "/etc/apt/sources.list.d/mise-claude-code.sources" ]
 }
 
 @test "\$HOME carries no file from gh, gnupg, vim or claude" {
