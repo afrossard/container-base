@@ -205,7 +205,7 @@ vscode:vscode" ]
 # Issues #210 and #215: neither mise nor the floating mise tools ship
 # completion files, so the shipped config's bootstrap task generates them.
 # Same compinit check as brew's below.
-@test "compinit registers mise's and the floating mise tools' completions in a non-interactive zsh" {
+@test "compinit registers the bootstrap task's generated completions in a non-interactive zsh" {
   run docker run --rm --user vscode "$IMAGE" zsh -c \
     'autoload -Uz compinit && compinit -u -D && print -r -- "${_comps[mise]} ${_comps[uv]} ${_comps[uvx]} ${_comps[gh]} ${_comps[chezmoi]} ${_comps[starship]} ${_comps[dive]}"'
   [ "$status" -eq 0 ]

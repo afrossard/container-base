@@ -8,7 +8,7 @@ They get a bare zsh, and that is the decision.
 The image ships functional wiring only.
 `/etc/zsh/zshenv` carries `PATH` for Homebrew and the mise shims, and `LANG` is set; `/etc/zsh/zshrc` is left as Debian ships it, and nothing in the image seeds history, runs `compinit`, or sets a prompt.
 
-Completion functions are functional wiring too, and ADR-0002 already lists them for dev images, so they ship: Homebrew's `fpath` entry rides its `shellenv` in `/etc/zsh/zshenv`, and uv's are generated into `/usr/local/share/zsh/site-functions` (issue #210).
+Completion functions are functional wiring too, and ADR-0002 already lists them for dev images, so they ship: Homebrew's `fpath` entry rides its `shellenv` in `/etc/zsh/zshenv`, and mise's and the floating mise tools' are generated into `/usr/local/share/zsh/site-functions` by the shipped config's `bootstrap` task (issues #210, #215, ADR-0024).
 Nothing in the image runs `compinit`, so they stay inert until a developer's own configuration loads the completion system.
 
 The `starship` binary ships, but the `starship init zsh` line does not.
