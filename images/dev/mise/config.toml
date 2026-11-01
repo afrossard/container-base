@@ -12,4 +12,4 @@
 # alias is not a valid version to Renovate and would never be bumped, so the
 # baked default would silently stale between rebuilds.
 [tools]
-node = "24"
+node = "26"
