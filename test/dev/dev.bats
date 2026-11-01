@@ -44,17 +44,49 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
-@test "uv is installed to a system path, not \$HOME" {
-  run docker run --rm "$IMAGE" sh -c 'command -v uv && command -v uvx'
+# ADR-0024: every floating mise tool, and the Node pin, resolves through the
+# shims on the image's own PATH - under plain sh and bash too, not only in
+# shells that read /etc/zsh/zshenv or /etc/profile.d.
+@test "the floating mise tools and node resolve to mise shims under sh and bash" {
+  shims=/usr/local/share/mise/shims
+  expected="$shims/uv
+$shims/uvx
+$shims/gh
+$shims/chezmoi
+$shims/starship
+$shims/dive
+$shims/node"
+  for shell in sh bash; do
+    # One name per `command -v`: dash's reports only its first argument.
+    run docker run --rm "$IMAGE" "$shell" -c \
+      'for tool in uv uvx gh chezmoi starship dive node; do command -v "$tool"; done'
+    [ "$status" -eq 0 ]
+    [ "$output" = "$expected" ]
+  done
+}
+
+# "latest" must resolve to the baked version, not to whatever is newest
+# upstream, or a shim would fail offline - or the day a new release ships.
+@test "the floating mise tools and node run with no network" {
+  run docker run --rm --network none "$IMAGE" sh -c \
+    'cd /tmp && uv --version && gh --version && chezmoi --version && starship --version && dive --version && node --version'
   [ "$status" -eq 0 ]
-  [ "$output" = "/usr/bin/uv
-/usr/bin/uvx" ]
 }
 
 @test "mise is installed via apt, at /usr/bin/mise" {
   run docker run --rm "$IMAGE" sh -c 'dpkg -s mise >/dev/null && command -v mise'
   [ "$status" -eq 0 ]
   [ "$output" = "/usr/bin/mise" ]
+}
+
+# ADR-0024: the shipped config declares every floating apt package and
+# mise tool, and the build installs them all from it. --missing still lists
+# every entry and carries the verdict in the exit code alone.
+@test "mise bootstrap reports nothing the shipped config declares as missing" {
+  run docker run --rm "$IMAGE" sh -c 'cd /tmp && mise bootstrap status --missing'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"apt:claude-code"* ]]
+  [[ "$output" == *"uv@latest"* ]]
 }
 
 @test "mise's data directory is vscode-owned" {
@@ -151,18 +183,33 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
+# ADR-0024's one upgrade command, as an operator runs it: as vscode, with no
+# TTY. The data directory must stay vscode-owned after it (ADR-0008).
+@test "mise bootstrap --upgrade runs as vscode with no TTY and keeps the data dir vscode-owned" {
+  run docker run --rm --user vscode "$IMAGE" sh -c '
+    set -e
+    cd /tmp
+    mise bootstrap --upgrade --yes >/dev/null 2>&1
+    stat -c "%U:%G" /usr/local/share/mise /usr/local/share/mise/installs
+  '
+  [ "$status" -eq 0 ]
+  [ "$output" = "vscode:vscode
+vscode:vscode" ]
+}
+
 @test "uv can resolve and fetch a Python interpreter" {
   run docker run --rm --user vscode "$IMAGE" zsh -lc 'uv python install 3.13'
   [ "$status" -eq 0 ]
 }
 
-# Issue #210: uv ships no completion files, so the image must generate
-# them. Same compinit check as brew's below.
-@test "compinit registers uv's and uvx's completions in a non-interactive zsh" {
+# Issue #210: the floating mise tools ship no completion files, so the
+# shipped config's bootstrap task generates them. Same compinit check as
+# brew's below.
+@test "compinit registers the floating mise tools' completions in a non-interactive zsh" {
   run docker run --rm --user vscode "$IMAGE" zsh -c \
-    'autoload -Uz compinit && compinit -u -D && print -r -- "${_comps[uv]} ${_comps[uvx]}"'
+    'autoload -Uz compinit && compinit -u -D && print -r -- "${_comps[uv]} ${_comps[uvx]} ${_comps[gh]} ${_comps[chezmoi]} ${_comps[starship]} ${_comps[dive]}"'
   [ "$status" -eq 0 ]
-  [ "$output" = "_uv _uvx" ]
+  [ "$output" = "_uv _uvx _gh _chezmoi _starship _dive" ]
 }
 
 @test "brew resolves in a non-interactive login shell" {
@@ -173,23 +220,25 @@ setup_file() {
 
 # Issue #210: dotfiles' ~/.zshrc only runs compinit, so completions must
 # already be on fpath. -D keeps compinit from writing a dump into $HOME.
-@test "compinit registers brew's and its formulae's completions in a non-interactive zsh" {
+@test "compinit registers brew's completion in a non-interactive zsh" {
   run docker run --rm --user vscode "$IMAGE" zsh -c \
-    'autoload -Uz compinit && compinit -u -D && print -r -- "${_comps[brew]} ${_comps[dive]} ${_comps[starship]}"'
+    'autoload -Uz compinit && compinit -u -D && print -r -- "${_comps[brew]}"'
   [ "$status" -eq 0 ]
-  [ "$output" = "_brew _dive _starship" ]
+  [ "$output" = "_brew" ]
+}
+
+# ADR-0024: Homebrew is kept for the operator's own formulae; the image
+# declares none.
+@test "Homebrew carries no formula" {
+  run docker run --rm --user vscode "$IMAGE" zsh -lc 'brew list --formula'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }
 
 @test "the Homebrew prefix is vscode-owned" {
   run docker run --rm "$IMAGE" stat -c '%U:%G' /home/linuxbrew/.linuxbrew
   [ "$status" -eq 0 ]
   [ "$output" = "vscode:vscode" ]
-}
-
-@test "starship resolves on PATH" {
-  run docker run --rm --user vscode "$IMAGE" zsh -lc 'command -v starship'
-  [ "$status" -eq 0 ]
-  [ "$output" = "/home/linuxbrew/.linuxbrew/bin/starship" ]
 }
 
 # Scoped to shell configuration, not /home/linuxbrew: the Cellar's bundled
@@ -226,18 +275,29 @@ setup_file() {
   [ "$status" -eq 0 ]
 }
 
-@test "gh, vim and bubblewrap are installed via apt, not hand-rolled" {
+@test "vim and bubblewrap are installed via apt, not hand-rolled" {
   run docker run --rm "$IMAGE" sh -c \
-    'dpkg -s gh >/dev/null && dpkg -s vim >/dev/null && dpkg -s bubblewrap >/dev/null'
+    'dpkg -s vim >/dev/null && dpkg -s bubblewrap >/dev/null'
   [ "$status" -eq 0 ]
 }
 
-# dive is a Homebrew formula, so it only resolves in a login shell where
-# /etc/zsh/zshenv sources brew's shellenv.
-@test "dive resolves on PATH in a non-interactive login shell" {
-  run docker run --rm --user vscode "$IMAGE" zsh -lc 'command -v dive'
+# ADR-0024: Debian's gh lags far behind upstream, so gh is a mise tool.
+@test "gh is not installed via apt" {
+  run docker run --rm "$IMAGE" dpkg -s gh
+  [ "$status" -ne 0 ]
+}
+
+# The floating mise tools resolve in a login shell too, where Debian's
+# /etc/profile has rewritten PATH and /etc/zsh/zshenv puts the shims back.
+@test "the floating mise tools resolve to mise shims in a non-interactive login shell" {
+  shims=/usr/local/share/mise/shims
+  run docker run --rm --user vscode "$IMAGE" zsh -lc 'command -v uv gh chezmoi starship dive'
   [ "$status" -eq 0 ]
-  [ "$output" = "/home/linuxbrew/.linuxbrew/bin/dive" ]
+  [ "$output" = "$shims/uv
+$shims/gh
+$shims/chezmoi
+$shims/starship
+$shims/dive" ]
 }
 
 @test "Claude Code is installed from the signed apt repository, stable channel" {
@@ -262,6 +322,14 @@ setup_file() {
     [ ! -e /home/vscode/.claude ] &&
     [ ! -e /home/vscode/.claude.json ]
   '
+  [ "$status" -eq 0 ]
+}
+
+# The build's `mise bootstrap` runs as root, and its tools write caches and
+# state there - gh's telemetry device id among them - that no image should
+# share across every container built from it.
+@test "/root carries no cache or state from the build" {
+  run docker run --rm --user root "$IMAGE" sh -c '[ ! -e /root/.cache ] && [ ! -e /root/.local ]'
   [ "$status" -eq 0 ]
 }
 

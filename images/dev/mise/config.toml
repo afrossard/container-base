@@ -1,15 +1,63 @@
 # Shipped verbatim to /etc/mise/config.toml in the dev image (ADR-0020).
 #
 # This is mise's *system* config, the lowest layer of its precedence chain:
-# it gives a bare `node` a version to resolve outside any project, while a
-# project's own .mise.toml still layers over it and wins. MISE_GLOBAL_CONFIG_FILE
-# stays unset (ADR-0008) - this pin ships as the system config, not the global one.
+# a project's own .mise.toml still layers over it and wins. MISE_GLOBAL_CONFIG_FILE
+# stays unset (ADR-0008) - this file ships as the system config, not the global one.
 #
+# It is the one declaration of everything the image installs beyond its
+# package sources (ADR-0024). The build installs from it with
+# `mise bootstrap --yes`; an operator brings it all current in place with
+# `mise bootstrap --upgrade`. Only Node is pinned; everything else floats.
+
+[tools]
 # Pinned to a concrete current Active LTS major rather than the `lts` alias
 # (issue #102): Renovate's mise manager scans this path, and its Node
 # versioning is LTS-aware, so it opens a bump PR only when the next line
 # reaches Active LTS - never for an odd or not-yet-LTS major. The bare `lts`
 # alias is not a valid version to Renovate and would never be bumped, so the
 # baked default would silently stale between rebuilds.
-[tools]
 node = "26"
+# Floating (ADR-0024): upstream binaries, whose own release cadence matters.
+uv = "latest"
+gh = "latest"
+chezmoi = "latest"
+starship = "latest"
+dive = "latest"
+
+# Floating apt packages (ADR-0024). claude-code comes from Anthropic's signed
+# repository and mise from the extrepo source, both added by the Containerfile;
+# mise cannot install itself, so it is declared only so the upgrade covers it.
+# zsh and sudo must exist before the Containerfile's /etc/zsh/zshenv and
+# /etc/sudoers edits. libatomic1 is linked by Node 26+'s upstream Linux
+# binaries and absent from trixie-slim (issue #223).
+[bootstrap.packages]
+"apt:mise" = "latest"
+"apt:claude-code" = "latest"
+"apt:vim" = "latest"
+"apt:bubblewrap" = "latest"
+"apt:git" = "latest"
+"apt:curl" = "latest"
+"apt:zsh" = "latest"
+"apt:sudo" = "latest"
+"apt:libatomic1" = "latest"
+
+# Runs last on every `mise bootstrap`, after the tools are current.
+#
+# The packages step upgrades only the declared names, not their dependencies
+# or the base layer, so a full upgrade follows.
+#
+# None of the floating mise tools ship zsh completion files, and evaluating
+# them at shell start is slow (~165ms for uv alone, issue #210), so they are
+# generated here into a directory on zsh's default fpath. Here rather than
+# once at build, so they never lag behind an in-place upgrade.
+[tasks.bootstrap]
+run = [
+  "sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get full-upgrade -y",
+  "sudo install -d /usr/local/share/zsh/site-functions",
+  "uv generate-shell-completion zsh | sudo tee /usr/local/share/zsh/site-functions/_uv >/dev/null",
+  "uvx --generate-shell-completion zsh | sudo tee /usr/local/share/zsh/site-functions/_uvx >/dev/null",
+  "gh completion -s zsh | sudo tee /usr/local/share/zsh/site-functions/_gh >/dev/null",
+  "starship completions zsh | sudo tee /usr/local/share/zsh/site-functions/_starship >/dev/null",
+  "dive completion zsh | sudo tee /usr/local/share/zsh/site-functions/_dive >/dev/null",
+  "chezmoi completion zsh | sudo tee /usr/local/share/zsh/site-functions/_chezmoi >/dev/null",
+]

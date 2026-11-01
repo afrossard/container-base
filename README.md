@@ -10,7 +10,7 @@ Three kinds of image, tagged `{version}-{variant}`:
 
 There is no `python-dev`. The dev image carries every language, so there is nothing to choose between.
 
-No language runtime is baked: `uv` resolves Python and `mise` resolves everything else, from the version each project declares.
+Only a default Node is baked (ADR-0020): `uv` resolves Python and `mise` resolves everything else, from the version each project declares.
 
 Pin a version and let Renovate bump it.
 
@@ -22,6 +22,19 @@ It is host-side tooling, a deliberate, narrow exception to this repo's image-onl
 Both ship through a personal Homebrew tap (`brew install afrossard/tap/agent-runtime`), so any machine gets a working launcher and cleanup script with one command - no container-base checkout, no PATH edits.
 `brew upgrade` delivers new releases, each carrying its release-please-stamped agent image pin.
 Run either from inside any repo's checkout to create or resume a runtime anchored to that repo.
+
+## Upgrading in place
+
+Only the Debian release and the default Node major are pinned; every other tool floats, and an image carries whatever was newest when it was built (ADR-0024).
+`/etc/mise/config.toml` declares all of it, so one command brings a running environment current:
+
+| Where                                | Command                                             | What it does                                                                                |
+| ------------------------------------ | --------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| inside a devcontainer or runtime     | `mise bootstrap --upgrade`                          | every floating mise tool, every declared apt package, then a full Debian upgrade            |
+| same, for formulae installed by hand | `brew upgrade`                                      | your own Homebrew formulae; the image declares none                                         |
+| host, only to take a newer image     | `brew upgrade`, then `launch-agent-runtime --reset` | the launcher's image pin; optional, since the runtime's tools already stay current in place |
+
+Nothing upgrades in place unattended: attaching to or starting an environment never runs the upgrade.
 
 ## Host prerequisites
 

@@ -1,5 +1,9 @@
 # mise installs system-wide, and sudo is what forces it
 
+> **Amended by [ADR-0024](./0024-pin-the-platform-and-runtimes-float-the-tools.md).**
+> The shims directory also goes on the image's `ENV PATH`: wired only through zshenv and profile.d, shims did not resolve under `sh -c` or `bash -c`, which `dotfiles-bootstrap` and consumers' `RUN` steps use.
+> The data directory, the chown and `secure_path` stand unchanged.
+
 ADR-0006 puts `mise` in shims mode so that non-interactive shells resolve tools.
 Left at its defaults `mise` is a per-user tool: `mise doctor` reports `shims: ~/.local/share/mise/shims`, and that directory does not exist until the user first runs `mise`.
 We move the data directory to `/usr/local/share/mise`, give it to `vscode`, and prepend the shims directory to sudo's `secure_path`.
