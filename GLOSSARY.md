@@ -26,7 +26,7 @@ The dev image carries every language and therefore has no variant.
 
 **Language manager**:
 The tool that owns a language's runtime and resolves which version a project gets.
-No language runtime is carried at a fixed version; a manager fetches what a project asks for.
+Only a default runtime is baked (ADR-0020); a manager fetches whatever version a project asks for.
 
 **Image tag**:
 `{version}-{variant}`, where variant is `dev`, `agent`, or `{language variant}-prod`.

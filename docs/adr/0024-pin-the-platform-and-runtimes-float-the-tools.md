@@ -9,17 +9,17 @@ uv was the only tool driving that cascade; claude-code, gh, starship and dive al
 
 - **Pinned**: the `debian:trixie-slim` release and the default Node major (ADR-0020). Renovate bumps them and they change only through an image release.
 - **Floating**: everything else. No version is declared in this repo; the image carries whatever its install source offered at build time, as a floor, and every build also runs a full Debian upgrade so the base layer is current trixie.
-- **One declaration**: the shipped mise system config, `/etc/mise/config.toml`, lists the Node pin, every floating mise tool under `[tools]`, every floating apt package under `[bootstrap.packages]`, and a `bootstrap` task running `apt-get full-upgrade`. The build installs from it with `mise bootstrap --yes`; the Containerfile keeps only the package sources (the mise extrepo, Anthropic's apt repo and its key check, the Homebrew installer).
+- **One declaration**: the shipped mise system config, `/etc/mise/config.toml`, lists the Node pin, every floating mise tool under `[tools]`, every floating apt package under `[bootstrap.packages]`, and a `bootstrap` task running `apt-get full-upgrade`. The build installs from it with `mise bootstrap --yes`; the Containerfile keeps only the package sources (the mise extrepo, Anthropic's apt repo and its key check, the Homebrew installer) and what adding them takes (`ca-certificates`, `curl`, `extrepo`, `gnupg`).
 - **One upgrade command**: `mise bootstrap --upgrade`, run by hand. It is never run automatically on attach or start, because bringup is fast, idempotent convergence (ADR-0021) and an upgrade is neither.
 
 Which installer a floating tool gets turns on whether its own release cadence matters:
 
-| Installer                     | Tools                                       | Why                                                                         |
-| ----------------------------- | ------------------------------------------- | --------------------------------------------------------------------------- |
-| mise tool (upstream binaries) | uv, gh, chezmoi, starship, dive             | Upstream cadence matters; Debian's `gh` lags far behind.                    |
-| apt, vendor repo              | claude-code                                 | Anthropic's signed `stable` channel, already the vendor's newest stable.    |
-| apt, Debian                   | mise, vim, bubblewrap, git, curl, zsh, sudo | System plumbing; Debian's version is fine, and mise cannot install itself.  |
-| Homebrew                      | nothing declared                            | Kept installed for the operator's own ad-hoc use and Mac parity (ADR-0006). |
+| Installer                     | Tools                                                   | Why                                                                         |
+| ----------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------- |
+| mise tool (upstream binaries) | uv, gh, chezmoi, starship, dive                         | Upstream cadence matters; Debian's `gh` lags far behind.                    |
+| apt, vendor repo              | claude-code                                             | Anthropic's signed `stable` channel, already the vendor's newest stable.    |
+| apt, Debian                   | mise, vim, bubblewrap, git, curl, zsh, sudo, libatomic1 | System plumbing; Debian's version is fine, and mise cannot install itself.  |
+| Homebrew                      | nothing declared                                        | Kept installed for the operator's own ad-hoc use and Mac parity (ADR-0006). |
 
 The mise shims directory goes on the image's `ENV PATH`, ahead of the system directories.
 Before this, shims were wired only through `/etc/zsh/zshenv` and `/etc/profile.d` (ADR-0008), and measured on the dev image `command -v node` returned nothing under `sh -c` and `bash -c`.

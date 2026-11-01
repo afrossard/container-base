@@ -67,7 +67,7 @@ $shims/node"
 
 # "latest" must resolve to the baked version, not to whatever is newest
 # upstream, or a shim would fail offline - or the day a new release ships.
-@test "the floating mise tools run with no network" {
+@test "the floating mise tools and node run with no network" {
   run docker run --rm --network none "$IMAGE" sh -c \
     'cd /tmp && uv --version && gh --version && chezmoi --version && starship --version && dive --version && node --version'
   [ "$status" -eq 0 ]
@@ -80,8 +80,8 @@ $shims/node"
 }
 
 # ADR-0024: the shipped config declares every floating apt package and
-# mise tool, and the build installs them all from it. --missing makes any
-# difference from the config fail the exit code.
+# mise tool, and the build installs them all from it. --missing still lists
+# every entry and carries the verdict in the exit code alone.
 @test "mise bootstrap reports nothing the shipped config declares as missing" {
   run docker run --rm "$IMAGE" sh -c 'cd /tmp && mise bootstrap status --missing'
   [ "$status" -eq 0 ]
@@ -290,13 +290,14 @@ vscode:vscode" ]
 # The floating mise tools resolve in a login shell too, where Debian's
 # /etc/profile has rewritten PATH and /etc/zsh/zshenv puts the shims back.
 @test "the floating mise tools resolve to mise shims in a non-interactive login shell" {
+  shims=/usr/local/share/mise/shims
   run docker run --rm --user vscode "$IMAGE" zsh -lc 'command -v uv gh chezmoi starship dive'
   [ "$status" -eq 0 ]
-  [ "$output" = "/usr/local/share/mise/shims/uv
-/usr/local/share/mise/shims/gh
-/usr/local/share/mise/shims/chezmoi
-/usr/local/share/mise/shims/starship
-/usr/local/share/mise/shims/dive" ]
+  [ "$output" = "$shims/uv
+$shims/gh
+$shims/chezmoi
+$shims/starship
+$shims/dive" ]
 }
 
 @test "Claude Code is installed from the signed apt repository, stable channel" {

@@ -56,6 +56,9 @@ RUN apt-get update \
     && chown -R 1000:1000 "$MISE_DATA_DIR" \
     && rm -rf /var/lib/apt/lists/* /root/.gnupg /root/.cache /root/.local
 
+# sudo and zsh, which the edits below need, come from the shipped config's
+# [bootstrap.packages] installed above.
+#
 # mise runs system-wide in shims mode (ADR-0008): shims prepended to sudo's
 # secure_path, the only one sudo reads, and to PATH again in the shell
 # startup files, since Debian's /etc/profile rewrites PATH for login shells.
