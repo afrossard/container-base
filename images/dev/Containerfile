@@ -2,58 +2,64 @@ FROM debian:trixie-slim
 
 ENV LANG=C.UTF-8
 
-# uv owns the Python interpreter (ADR-0006). COPY --from avoids the shell
-# installer's $HOME writes.
-COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /uvx /bin/
-
-# uv's zsh completions, generated here because evaluating them at shell
-# start costs ~165ms (issue #210). The directory is on zsh's default fpath.
-RUN site_functions=/usr/local/share/zsh/site-functions \
-    && mkdir -p "$site_functions" \
-    && uv generate-shell-completion zsh > "$site_functions/_uv" \
-    && uvx --generate-shell-completion zsh > "$site_functions/_uvx"
-
-# mise owns Node and every language added later (ADR-0006), from apt rather
-# than the `mise.run` script, which targets $HOME.
+# Only the platform and Node are pinned; every tool floats (ADR-0024).
+# The shipped mise system config is the one declaration of what floats, and
+# this file keeps only the package sources it installs from.
 #
-# zsh and sudo are installed here so /etc/zsh/zshenv and /etc/sudoers exist
-# for the appends below; the common-utils feature leaves them alone.
+# mise owns Node and every language added later (ADR-0006), installed
+# system-wide into a shared data directory (ADR-0008).
 ENV MISE_DATA_DIR=/usr/local/share/mise
 
-# System-level default Node pin (ADR-0020): mise reads /etc/mise/config.toml
-# as its lowest config layer, so a bare `node` resolves outside any project
-# while a project .mise.toml still wins. Read by the `mise install` below.
+# The shims go on the image's own PATH, not just the shell startup files
+# below, so `sh -c`, `bash -c` and a consumer's `RUN` resolve them too:
+# dotfiles-bootstrap is `#!/bin/sh` and calls chezmoi (ADR-0024).
+ENV PATH=${MISE_DATA_DIR}/shims:${PATH}
+
+# mise's system config, its lowest config layer (ADR-0020): a bare `node`
+# resolves outside any project while a project .mise.toml still wins.
 COPY mise/config.toml /etc/mise/config.toml
 
-# ca-certificates, curl and git are for the Homebrew installer below, in
-# this layer to share one apt-get with the base tooling.
+# The package sources, then everything else from the shipped config.
 #
-# libatomic1 is linked by Node 26+'s upstream Linux binaries and absent
-# from trixie-slim (issue #223); without it every `mise install` of Node 26
-# fails, baked pin or project pin alike.
+# mise comes from its extrepo source, and is installed here because
+# `mise bootstrap` cannot install itself. Claude Code comes from Anthropic's
+# signed apt repository, `stable` channel: the native installer writes into
+# ~/.local, the one directory this image must leave alone, and
+# `claude-code` is a Homebrew cask (unsupported on Linux). The key's
+# fingerprint is checked against Anthropic's published one first.
 #
-# `mise install` with no arguments bakes the system-config pin (ADR-0020)
-# into the shared vscode-owned data directory. chown runs after, as root.
+# `mise bootstrap --yes` then installs the declared apt packages, the
+# tools (baking the Node pin and the floating tools into the shared data
+# directory) and runs the `bootstrap` task, whose full upgrade brings the
+# base layer current. It runs as root here, so the data directory is
+# chowned to vscode after (ADR-0008), and root's caches and state - gh's
+# telemetry device id among them - are dropped rather than baked.
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         extrepo \
-        git \
-        libatomic1 \
-        sudo \
-        zsh \
+        gnupg \
     && extrepo enable mise \
+    && install -d -m 0755 /etc/apt/keyrings \
+    && curl -fsSL https://downloads.claude.ai/keys/claude-code.asc \
+        -o /etc/apt/keyrings/claude-code.asc \
+    && fingerprint="$(gpg --show-keys --with-colons --with-fingerprint /etc/apt/keyrings/claude-code.asc \
+        | awk -F: '$1 == "fpr" { print $10; exit }')" \
+    && [ "$fingerprint" = "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE" ] \
+    && echo "deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" \
+        > /etc/apt/sources.list.d/claude-code.list \
     && apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mise \
-    && rm -rf /var/lib/apt/lists/* \
     && mkdir -p "$MISE_DATA_DIR" \
-    && mise install \
-    && chown -R 1000:1000 "$MISE_DATA_DIR"
+    && mise bootstrap --yes \
+    && chown -R 1000:1000 "$MISE_DATA_DIR" \
+    && rm -rf /var/lib/apt/lists/* /root/.gnupg /root/.cache /root/.local
 
-# mise runs system-wide in shims mode (ADR-0008): shims on PATH for every
-# shell and prepended to sudo's secure_path, the only one sudo reads.
-# MISE_GLOBAL_CONFIG_FILE stays unset - the baked pin is mise's system
+# mise runs system-wide in shims mode (ADR-0008): shims prepended to sudo's
+# secure_path, the only one sudo reads, and to PATH again in the shell
+# startup files, since Debian's /etc/profile rewrites PATH for login shells.
+# MISE_GLOBAL_CONFIG_FILE stays unset - the shipped config is mise's system
 # config (ADR-0020), not its global one, so per-project pins still win.
 RUN sed -i \
         "s|^Defaults\tsecure_path=\"|Defaults\tsecure_path=\"${MISE_DATA_DIR}/shims:|" \
@@ -62,7 +68,8 @@ RUN sed -i \
     && printf '\n# mise shims (ADR-0008)\n%s\n' "$shims_line" >> /etc/zsh/zshenv \
     && printf '# mise shims (ADR-0008)\n%s\n' "$shims_line" > /etc/profile.d/mise-shims.sh
 
-# Homebrew, for parity with the Mac. Its installer refuses root unless it
+# Homebrew, for parity with the Mac and the operator's own ad-hoc formulae;
+# the image declares none (ADR-0024). Its installer refuses root unless it
 # sees /.dockerenv, which a BuildKit `RUN` step doesn't create, so it is
 # faked around the install. Prefix chowned to vscode afterward. shellenv
 # goes in /etc/zsh/zshenv so non-interactive shells get it too (ADR-0010).
@@ -74,19 +81,14 @@ ENV NONINTERACTIVE=1
 
 RUN touch /.dockerenv \
     && /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
-    && "$HOMEBREW_PREFIX/bin/brew" install dive starship \
     && chown -R 1000:1000 "$HOMEBREW_PREFIX" \
     && rm -f /.dockerenv \
-    && rm -rf /root/.cache/Homebrew \
+    && rm -rf /root/.cache \
     && printf '\n# Homebrew shellenv (ADR-0010)\n%s\n' \
         "$("$HOMEBREW_PREFIX/bin/brew" shellenv zsh)" >> /etc/zsh/zshenv
 
 # The starship binary ships but no `starship init` line is written: shell
 # ergonomics are a personal-dotfiles concern (ADR-0010).
-
-# chezmoi system-wide at /usr/local/bin (ADR-0005, ADR-0009). -b overrides
-# the installer's ~/.local default, which would prompt with no TTY.
-RUN curl -fsSL get.chezmoi.io | sh -s -- -b /usr/local/bin
 
 # dotfiles-bootstrap is the one thing every consumer calls (ADR-0007): it
 # reads the dotfiles repo from the environment, never bakes one in (ADR-0001).
@@ -99,36 +101,6 @@ RUN chmod 0755 /usr/local/bin/dotfiles-bootstrap
 # on the jq the common-utils feature installs, pinned by test/dev/dev.bats.
 COPY docker-prune-credsstore /usr/local/bin/docker-prune-credsstore
 RUN chmod 0755 /usr/local/bin/docker-prune-credsstore
-
-# gh, vim, bubblewrap ship in Debian's repository (issue #7). gnupg is here
-# to verify Claude Code's signing key below. bubblewrap is required by
-# Claude Code's sandbox mode and was missing from common-utils (ADR-0005).
-RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        bubblewrap \
-        gh \
-        gnupg \
-        vim \
-    && rm -rf /var/lib/apt/lists/*
-
-# dive has no Debian package; it rides the same brew install as starship.
-
-# Claude Code from its official signed apt repository, `stable` channel: the
-# native installer writes into ~/.local, the one directory this image must
-# leave alone, and `claude-code` is a Homebrew cask (unsupported on Linux).
-# apt installs don't auto-update, correct for a versioned base image. The
-# key's fingerprint is checked against Anthropic's published one first.
-RUN install -d -m 0755 /etc/apt/keyrings \
-    && curl -fsSL https://downloads.claude.ai/keys/claude-code.asc \
-        -o /etc/apt/keyrings/claude-code.asc \
-    && fingerprint="$(gpg --show-keys --with-colons --with-fingerprint /etc/apt/keyrings/claude-code.asc \
-        | awk -F: '$1 == "fpr" { print $10; exit }')" \
-    && [ "$fingerprint" = "31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE" ] \
-    && echo "deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" \
-        > /etc/apt/sources.list.d/claude-code.list \
-    && apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends claude-code \
-    && rm -rf /var/lib/apt/lists/* /root/.gnupg
 
 # vscode, not root, is this image's default (issue #17): a plain `docker run`
 # would otherwise land as root, which Claude Code rejects for

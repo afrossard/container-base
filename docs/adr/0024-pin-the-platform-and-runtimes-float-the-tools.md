@@ -63,5 +63,6 @@ claude-code does not self-update: apt installs don't.
 - **A breaking release.** `/bin/uv`, `/bin/uvx`, `/usr/bin/gh` and `/usr/local/bin/chezmoi` are replaced by mise shims, Homebrew no longer carries `starship` or `dive`, and uv floats. A consumer hardcoding a path or relying on the image's uv version breaks.
 - **Image releases stop being something to chase.** A new image matters only for the pinned set and for a fresher floor; a long-lived runtime gets everything else from the upgrade command.
 - **Two builds from the same commit can differ.** That is the price of floating, accepted because CI tests every build.
+- **Completions follow the upgrade.** None of the floating mise tools ship zsh completion files, so the `bootstrap` task regenerates them (issue #210's reason for not evaluating them at shell start still holds). Generated once at build instead, they would lag every in-place upgrade.
 - **The floor goes stale between merges.** There is no scheduled rebuild; a fresh environment from an old image is one command away from current. Revisit if stale-floor starts become a real annoyance.
 - **Glossary**: _pinned_ and _floating_ are defined there.

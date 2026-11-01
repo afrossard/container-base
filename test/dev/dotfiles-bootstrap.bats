@@ -105,10 +105,13 @@ home_stat() {
   [ "$status" -eq 0 ]
 }
 
-@test "chezmoi is installed to /usr/local/bin" {
+# chezmoi is a floating mise tool (ADR-0024). The bootstrap tests above
+# exec dotfiles-bootstrap, a `#!/bin/sh` script, with no shell startup
+# file read, so they also prove the image's own PATH carries the shims.
+@test "chezmoi resolves to its mise shim" {
   run docker run --rm "$IMAGE" sh -c 'command -v chezmoi'
   [ "$status" -eq 0 ]
-  [ "$output" = "/usr/local/bin/chezmoi" ]
+  [ "$output" = "/usr/local/share/mise/shims/chezmoi" ]
 }
 
 @test "dotfiles-bootstrap is installed to /usr/local/bin" {
