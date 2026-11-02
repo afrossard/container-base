@@ -2,3 +2,5 @@
 CHANGELOG.md
 uv.lock
 node_modules/
+# Claude Code agent worktrees: other branches checked out in place
+.claude/worktrees/
