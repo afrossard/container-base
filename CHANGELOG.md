@@ -1,5 +1,28 @@
 # Changelog
 
+## [5.0.0](https://github.com/afrossard/container-base/compare/4.0.4...5.0.0) (2026-11-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **dev:** /bin/uv, /bin/uvx, /usr/bin/gh and /usr/local/bin/chezmoi are replaced by mise shims under /usr/local/share/mise/shims; Homebrew no longer carries starship or dive; uv is no longer pinned and floats to its newest release at build time. A consumer hardcoding one of those paths, or relying on the image's uv version, must update.
+* **agent:** an existing agent runtime keeps its docker volume at /var/lib/docker, so it must be reset (`launch-agent-runtime --reset`) before it can use an image from this release; until then every docker run and build inside it fails.
+
+### Features
+
+* **deps:** update node.js to v26 ([#221](https://github.com/afrossard/container-base/issues/221)) ([41828f0](https://github.com/afrossard/container-base/commit/41828f0901aa63dbda46667b55ee38fa2fb1229c))
+* **dev:** bake mise's zsh completions into the dev image ([#235](https://github.com/afrossard/container-base/issues/235)) ([4518c76](https://github.com/afrossard/container-base/commit/4518c76a10ef4b14d8605c70eb73765b8448c334))
+* **dev:** declare Claude Code's apt repository in the shipped mise config ([#232](https://github.com/afrossard/container-base/issues/232)) ([8b85c44](https://github.com/afrossard/container-base/commit/8b85c4483f8ac5f0b2429b1347d5eea667fe37ea))
+* **dev:** pin the platform and Node, float the tools, upgrade in place with mise bootstrap ([#230](https://github.com/afrossard/container-base/issues/230)) ([757ec70](https://github.com/afrossard/container-base/commit/757ec70b74f67a5a8637b8f7625efbdd8c5c08a2))
+* **launcher:** allow one LAN service through the egress policy with --allow-url ([#236](https://github.com/afrossard/container-base/issues/236)) ([d7e2f9a](https://github.com/afrossard/container-base/commit/d7e2f9a41e8bfaa3cb6f73ac224f89f109c82f5d)), closes [#234](https://github.com/afrossard/container-base/issues/234)
+
+
+### Bug Fixes
+
+* **agent:** pick the nested dockerd iptables backend at boot ([#224](https://github.com/afrossard/container-base/issues/224)) ([d07abfc](https://github.com/afrossard/container-base/commit/d07abfc10d6046dbb5bf2267415fa24834daa4bc))
+* **deps:** update ghcr.io/astral-sh/uv docker tag to v0.13.6 ([#216](https://github.com/afrossard/container-base/issues/216)) ([6beba1b](https://github.com/afrossard/container-base/commit/6beba1b78cf571f32bcc24768a94f84cd272483b))
+* **dev:** install libatomic1 so Node 26 runs ([#228](https://github.com/afrossard/container-base/issues/228)) ([74b03da](https://github.com/afrossard/container-base/commit/74b03da355a59c44815e6dde628d6687e2eff3fb)), closes [#223](https://github.com/afrossard/container-base/issues/223)
+
 ## [4.0.4](https://github.com/afrossard/container-base/compare/4.0.3...4.0.4) (2026-10-10)
 
 
