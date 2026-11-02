@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Stub `getent` for the launcher bats suite: answers `getent ahostsv4 NAME`
+# from STUB_HOSTS, a space-separated list of NAME=IP[,IP...] entries, in the
+# real command's "IP STREAM NAME" line shape. An unknown name exits 2, as
+# the real command does for a key it can't find.
+
+[ "$1" = "ahostsv4" ] || {
+  echo "getent stub: unexpected database: $1" >&2
+  exit 64
+}
+for entry in $STUB_HOSTS; do
+  if [ "${entry%%=*}" = "$2" ]; then
+    for ip in $(printf '%s' "${entry#*=}" | tr ',' ' '); do
+      printf '%-15s STREAM %s\n' "$ip" "$2"
+    done
+    exit 0
+  fi
+done
+exit 2

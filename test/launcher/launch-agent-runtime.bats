@@ -11,8 +11,9 @@
 setup() {
   stub_dir="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$stub_dir"
-  cp "$BATS_TEST_DIRNAME/../helpers/msb" "$BATS_TEST_DIRNAME/../helpers/jq" "$stub_dir/"
-  chmod +x "$stub_dir/msb" "$stub_dir/jq"
+  cp "$BATS_TEST_DIRNAME/../helpers/msb" "$BATS_TEST_DIRNAME/../helpers/jq" \
+    "$BATS_TEST_DIRNAME/../helpers/getent" "$stub_dir/"
+  chmod +x "$stub_dir/msb" "$stub_dir/jq" "$stub_dir/getent"
   export PATH="$stub_dir:$PATH"
 
   # The stub records one argument per line, so a value that word-split
@@ -31,6 +32,9 @@ setup() {
   # path.
   export STUB_ALL=""
   export STUB_RUNNING=""
+
+  # Host DNS the stub getent answers from, as NAME=IP[,IP...] entries.
+  export STUB_HOSTS="nas.lan=192.168.1.20"
 }
 
 # Explicit --name skips sandbox resolution and --clone-url skips the remote
@@ -315,4 +319,151 @@ reset_bare() {
   run launch
   [ "$status" -eq 0 ]
   has_flag_value "--env" "TOOLING_REPO=https://example.invalid/tooling.git"
+}
+
+# --- --allow-url: the "explicitly allowed" half of the private-network
+#     policy (issue #234; the deny half is ADR-0013 / issue #30). ---
+
+# Line number of the first whole-line match of $1 in the recorded args.
+arg_line() {
+  grep -nFx -- "$1" "$MSB_ARGS_FILE" | head -1 | cut -d: -f1
+}
+
+# The rule shape is the one measured against msb 0.7.13 on issue #234: msb's
+# DNS rebind protection drops a private answer unless an address-only rule
+# allows that address, so the group ends in a bare allow@IP, and port-range
+# denies ahead of it (first match wins) narrow it back to the one port.
+@test "--allow-url resolves the host and forwards a one-port rule group after --net public" {
+  run launch --allow-url http://nas.lan:8080
+  [ "$status" -eq 0 ]
+  has_flag_value "--net" "public"
+  has_flag_value "--net-rule" \
+    "deny@192.168.1.20:tcp:1-8079,deny@192.168.1.20:tcp:8081-65535,deny@192.168.1.20:udp,allow@192.168.1.20"
+  [ "$(arg_line --net)" -lt "$(arg_line --net-rule)" ]
+}
+
+@test "--allow-url takes the port from the scheme when the URL names none, and drops the path" {
+  export STUB_HOSTS="nas.lan=192.168.1.20 ha.lan=192.168.1.30"
+  run launch --allow-url http://nas.lan/admin --allow-url https://ha.lan/
+  [ "$status" -eq 0 ]
+  has_flag_value "--net-rule" \
+    "deny@192.168.1.20:tcp:1-79,deny@192.168.1.20:tcp:81-65535,deny@192.168.1.20:udp,allow@192.168.1.20"
+  has_flag_value "--net-rule" \
+    "deny@192.168.1.30:tcp:1-442,deny@192.168.1.30:tcp:444-65535,deny@192.168.1.30:udp,allow@192.168.1.30"
+}
+
+# msb drops a whole DNS answer if any private address in it isn't allowed
+# (measured on issue #234), so every address the host resolves gets a group.
+@test "--allow-url forwards one rule group per address the host resolves to" {
+  export STUB_HOSTS="nas.lan=192.168.1.20,192.168.2.20"
+  run launch --allow-url https://nas.lan
+  [ "$status" -eq 0 ]
+  has_flag_value "--net-rule" \
+    "deny@192.168.1.20:tcp:1-442,deny@192.168.1.20:tcp:444-65535,deny@192.168.1.20:udp,allow@192.168.1.20"
+  has_flag_value "--net-rule" \
+    "deny@192.168.2.20:tcp:1-442,deny@192.168.2.20:tcp:444-65535,deny@192.168.2.20:udp,allow@192.168.2.20"
+}
+
+@test "--allow-url with an IPv4 literal uses it as given, without a lookup" {
+  export STUB_HOSTS=""
+  run launch --allow-url http://10.0.0.5:3000
+  [ "$status" -eq 0 ]
+  has_flag_value "--net-rule" \
+    "deny@10.0.0.5:tcp:1-2999,deny@10.0.0.5:tcp:3001-65535,deny@10.0.0.5:udp,allow@10.0.0.5"
+}
+
+@test "--allow-url on port 1 or 65535 leaves out the empty deny range" {
+  export STUB_HOSTS="a.lan=10.0.0.1 b.lan=10.0.0.2"
+  run launch --allow-url http://a.lan:1 --allow-url http://b.lan:65535
+  [ "$status" -eq 0 ]
+  has_flag_value "--net-rule" "deny@10.0.0.1:tcp:2-65535,deny@10.0.0.1:udp,allow@10.0.0.1"
+  has_flag_value "--net-rule" "deny@10.0.0.2:tcp:1-65534,deny@10.0.0.2:udp,allow@10.0.0.2"
+}
+
+@test "--allow-url with a host that doesn't resolve fails before creating anything" {
+  run launch --allow-url http://missing.lan
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"'missing.lan' does not resolve"* ]]
+  [ ! -f "$MSB_ARGS_FILE" ]
+  [ ! -f "$MSB_VOLUME_FILE" ]
+}
+
+# One port per host: a second group for an address would never be reached,
+# since the first group's denies match first.
+@test "a second --allow-url landing on an already-allowed address is refused" {
+  export STUB_HOSTS="nas.lan=192.168.1.20 nas-alias.lan=192.168.1.20"
+  run launch --allow-url https://nas.lan --allow-url http://nas-alias.lan:8080
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"one port per host"* ]]
+  [ ! -f "$MSB_ARGS_FILE" ]
+}
+
+@test "--allow-url rejects a URL it cannot turn into one host and port, and creates nothing" {
+  for url in nas.lan:8080 ftp://nas.lan http://nas.lan:80a http://nas.lan:0 \
+    http://nas.lan:65536 http://nas.lan:123456789012345678901 http:// http://user:pw@nas.lan http://[fd00::1]:8080; do
+    run launch --allow-url "$url"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"--allow-url"* ]]
+    [ ! -f "$MSB_ARGS_FILE" ]
+  done
+}
+
+# A LAN exception only: --net public already allows public addresses, and a
+# group for one would narrow it to a single port; loopback and link-local
+# (cloud metadata) are never a LAN service.
+@test "--allow-url refuses an address outside the private ranges, before creating anything" {
+  export STUB_HOSTS="example.com=93.184.215.14 mixed.lan=192.168.1.20,93.184.215.14"
+  for url in https://example.com https://mixed.lan http://127.0.0.1:8080 \
+    http://169.254.169.254 http://999.1.1.1 http://192.168.1.256; do
+    run launch --allow-url "$url"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"--allow-url"* ]]
+    [ ! -f "$MSB_ARGS_FILE" ]
+    [ ! -f "$MSB_VOLUME_FILE" ]
+  done
+}
+
+@test "--allow-url accepts each private range" {
+  export STUB_HOSTS=""
+  run launch --allow-url http://10.1.2.3 --allow-url http://172.31.0.1 \
+    --allow-url http://192.168.0.1 --allow-url http://100.64.0.1
+  [ "$status" -eq 0 ]
+  for ip in 10.1.2.3 172.31.0.1 192.168.0.1 100.64.0.1; do
+    has_flag_value "--net-rule" "deny@$ip:tcp:1-79,deny@$ip:tcp:81-65535,deny@$ip:udp,allow@$ip"
+  done
+}
+
+@test "--allow-url matches the scheme case-insensitively" {
+  run launch --allow-url HTTPS://nas.lan
+  [ "$status" -eq 0 ]
+  has_flag_value "--net-rule" \
+    "deny@192.168.1.20:tcp:1-442,deny@192.168.1.20:tcp:444-65535,deny@192.168.1.20:udp,allow@192.168.1.20"
+}
+
+@test "--allow-url with --reset is rejected rather than ignored" {
+  export STUB_ALL="test-session"
+  run reset --force --allow-url https://nas.lan
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"--allow-url"*"--reset"* ]]
+  [ ! -f "$MSB_RM_FILE" ]
+}
+
+# The policy is fixed at creation (ADR-0021) and msb can't change an
+# existing sandbox's network rules, so an exception passed to an existing
+# runtime is reported, not silently dropped.
+@test "--allow-url passed to an existing runtime warns that it needs --reset, and still attaches" {
+  for running in "" test-session; do
+    export STUB_ALL="test-session" STUB_RUNNING="$running"
+    run launch --allow-url http://nas.lan:8080
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"--allow-url"*"--reset"* ]]
+    [ -f "$MSB_EXEC_FILE" ]
+  done
+}
+
+@test "an attach without --allow-url says nothing about the network policy" {
+  export STUB_ALL="test-session" STUB_RUNNING="test-session"
+  run launch
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"--allow-url"* ]]
 }

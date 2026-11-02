@@ -5,7 +5,8 @@
 # Usage:
 #   scripts/launch-agent-runtime [--name NAME] [--image REF] \
 #     [--clone-url URL] [--secret ENV@HOST]... [--secret-violation-action ACTION] \
-#     [--memory SIZE] [--cpus N] [--max-memory SIZE] [-- COMMAND...]
+#     [--allow-url URL]... [--memory SIZE] [--cpus N] [--max-memory SIZE] \
+#     [-- COMMAND...]
 #   scripts/launch-agent-runtime --reset [--name NAME] [--force]
 #
 # A bare launch attaches to this repo's agent runtime, resuming it if
@@ -41,6 +42,17 @@
 #                        recommended: block-and-log with --secret). `passthrough`
 #                        is rejected here - it's scoped per secret now, not
 #                        sandbox-wide (see the error message for the syntax)
+#   --allow-url URL      let the runtime reach one LAN service through the
+#                        private-network block (repeatable), e.g.
+#                        https://nas.lan or http://192.168.1.20:8080. The
+#                        whole host:port is reachable, not just the path;
+#                        the port is the URL's, else 80/443 for http/https;
+#                        one port per host; LAN addresses only (10/8,
+#                        172.16/12, 192.168/16, 100.64/10). The host is
+#                        resolved here, on this machine, and both it and
+#                        the rule are fixed when the runtime is created: to
+#                        add or change one, --reset, then launch with the
+#                        new set (ADR-0025)
 #   --memory SIZE        forwarded to `msb run --memory` (default: 4G)
 #   --cpus N             forwarded to `msb run --cpus` (default: 4)
 #   --max-memory SIZE    forwarded to `msb run --max-memory` (default: 16G)
@@ -84,9 +96,103 @@ reset=0
 force=0
 secrets=()
 violation_flag=()
+allow_endpoints=()
 memory="4G"
 cpus="4"
 max_memory="16G"
+
+# Prints "HOST PORT" for one --allow-url URL. msb filters on address,
+# protocol, and port, never path, so the path is dropped; a URL with no port
+# takes its scheme's default (http, https only). Refuses, with a message,
+# anything that isn't exactly one host and port.
+allow_url_endpoint() {
+  local url="$1" authority scheme host port
+  local url_re='^([A-Za-z][A-Za-z0-9+.-]*)://([^/?#]*)'
+  local authority_re='^([A-Za-z0-9.-]+)(:([0-9]{1,5}))?$'
+
+  if ! [[ "$url" =~ $url_re ]]; then
+    echo "launch-agent-runtime: --allow-url '$url' is not a URL; expected SCHEME://HOST[:PORT]" >&2
+    return 1
+  fi
+  # Schemes are case-insensitive (RFC 3986); bash 3.2 has no ${var,,}.
+  scheme=$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')
+  authority="${BASH_REMATCH[2]}"
+
+  if ! [[ "$authority" =~ $authority_re ]]; then
+    echo "launch-agent-runtime: --allow-url '$url' must name a plain host or IPv4 address and an optional port (no credentials, no IPv6 literal)" >&2
+    return 1
+  fi
+  host="${BASH_REMATCH[1]}"
+  port="${BASH_REMATCH[3]}"
+
+  if [ -z "$port" ]; then
+    case "$scheme" in
+      http) port=80 ;;
+      https) port=443 ;;
+      *)
+        echo "launch-agent-runtime: --allow-url '$url' names no port and '$scheme' has no default here; add :PORT" >&2
+        return 1
+        ;;
+    esac
+  fi
+  # Strip leading zeros before the range check so 08080 isn't read as octal.
+  port=$((10#$port))
+  if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+    echo "launch-agent-runtime: --allow-url '$url' has port $port, outside 1-65535" >&2
+    return 1
+  fi
+
+  printf '%s %s' "$host" "$port"
+}
+
+# Prints HOST's IPv4 addresses, one per line, as the host resolves them:
+# getent on Linux, dscacheutil on macOS. An IPv4 literal is its own answer.
+resolve_ipv4() {
+  local host="$1"
+  if [[ "$host" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+    printf '%s\n' "$host"
+  elif command -v getent >/dev/null 2>&1; then
+    getent ahostsv4 "$host" | awk '{print $1}' | sort -u
+  else
+    dscacheutil -q host -a name "$host" | awk '/^ip_address:/ {print $2}' | sort -u
+  fi
+}
+
+# True if ADDRESS is a well-formed IPv4 address in a LAN range: RFC 1918 or
+# carrier-grade NAT (100.64.0.0/10, where Tailscale lives). Public
+# addresses are left out because --net public already allows them, and a
+# rule group would narrow one to a single port; loopback and link-local
+# (cloud metadata) are never a LAN service.
+is_lan_ipv4() {
+  local a b c d
+  [[ "$1" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] || return 1
+  a=$((10#${BASH_REMATCH[1]})) b=$((10#${BASH_REMATCH[2]}))
+  c=$((10#${BASH_REMATCH[3]})) d=$((10#${BASH_REMATCH[4]}))
+  [ "$a" -le 255 ] && [ "$b" -le 255 ] && [ "$c" -le 255 ] && [ "$d" -le 255 ] || return 1
+  [ "$a" -eq 10 ] && return 0
+  [ "$a" -eq 172 ] && [ "$b" -ge 16 ] && [ "$b" -le 31 ] && return 0
+  [ "$a" -eq 192 ] && [ "$b" -eq 168 ] && return 0
+  [ "$a" -eq 100 ] && [ "$b" -ge 64 ] && [ "$b" -le 127 ] && return 0
+  return 1
+}
+
+# Prints the msb rule group allowing exactly TCP PORT at ADDRESS, in the
+# shape measured against msb 0.7.13 on issue #234. DNS rebind protection
+# rewrites a private answer to NXDOMAIN unless an address-only rule allows
+# that address, so the group ends in a bare allow@ADDRESS; msb applies the
+# first matching rule, so port-range denies ahead of it narrow that back to
+# the one port. They must be port ranges: a protocol-wide deny@ADDRESS:tcp
+# counts as an address deny and re-arms rebind protection.
+one_port_rule() {
+  local address="$1" port="$2" rule=""
+  if [ "$port" -gt 1 ]; then
+    rule="deny@${address}:tcp:1-$((port - 1)),"
+  fi
+  if [ "$port" -lt 65535 ]; then
+    rule="${rule}deny@${address}:tcp:$((port + 1))-65535,"
+  fi
+  printf '%sdeny@%s:udp,allow@%s' "$rule" "$address" "$address"
+}
 
 # Reuses the one sandbox for this repo, asks if several, mints
 # `<repo>-sandbox` (or `-sandbox-NNNN` on collision) if none.
@@ -147,6 +253,11 @@ while [ "$#" -gt 0 ]; do
       violation_flag=(--secret-violation-action "$2")
       shift 2
       ;;
+    --allow-url)
+      allow_endpoint=$(allow_url_endpoint "$2") || exit 1
+      allow_endpoints+=("$allow_endpoint")
+      shift 2
+      ;;
     --memory)
       memory="$2"
       shift 2
@@ -193,6 +304,11 @@ require_tools msb git
 if [ "$force" = "1" ] && [ "$reset" != "1" ]; then
   echo "launch-agent-runtime: --force only applies to --reset" >&2
   usage
+  exit 1
+fi
+
+if [ "$reset" = "1" ] && [ "${#allow_endpoints[@]}" -gt 0 ]; then
+  echo "launch-agent-runtime: --allow-url doesn't apply to --reset; pass it to the launch after the reset" >&2
   exit 1
 fi
 
@@ -287,6 +403,10 @@ attach_to_runtime() {
   wait_for_agent || exit 1
   msb exec --no-tty "$name" -- agent-bringup >&2 \
     || echo "launch-agent-runtime: agent-bringup reported a failure; the runtime may be under-provisioned" >&2
+  # Last before the handover, so bring-up output doesn't scroll it away.
+  if [ "${#allow_endpoints[@]}" -gt 0 ]; then
+    echo "launch-agent-runtime: --allow-url is not applied: '$name' keeps the network policy it was created with, and msb can't change it; run with --reset, then launch again with --allow-url" >&2
+  fi
   exec msb exec "$tty_flag" -u vscode -w "$workspace_dir" "$name" -- "$@"
 }
 
@@ -301,6 +421,35 @@ fi
 
 echo "launch-agent-runtime: no runtime for this repo, creating one" >&2
 
+# One rule group per address each --allow-url host resolves to, resolved
+# here on the host and fixed for the runtime's life. Every address gets
+# one: msb drops a whole DNS answer if any private address in it isn't
+# allowed. One port per address, so a second URL landing on an allowed
+# address is refused rather than merged.
+net_rules=()
+allowed_addresses=""
+for allow_endpoint in "${allow_endpoints[@]}"; do
+  allow_host="${allow_endpoint% *}"
+  allow_port="${allow_endpoint#* }"
+  addresses=$(resolve_ipv4 "$allow_host" || true)
+  if [ -z "$addresses" ]; then
+    echo "launch-agent-runtime: --allow-url host '$allow_host' does not resolve to an IPv4 address on this host" >&2
+    exit 1
+  fi
+  while IFS= read -r address; do
+    if ! is_lan_ipv4 "$address"; then
+      echo "launch-agent-runtime: --allow-url host '$allow_host' resolves to $address, which is not a private LAN address (10/8, 172.16/12, 192.168/16, 100.64/10); public addresses are already reachable" >&2
+      exit 1
+    fi
+    if contains_line "$allowed_addresses" "$address"; then
+      echo "launch-agent-runtime: --allow-url '$allow_host:$allow_port' resolves to $address, which another --allow-url already allows; one port per host" >&2
+      exit 1
+    fi
+    allowed_addresses="${allowed_addresses}${address}"$'\n'
+    net_rules+=(--net-rule "$(one_port_rule "$address" "$allow_port")")
+  done <<<"$addresses"
+done
+
 docker_volume="${name}-docker-data"
 
 ensure_volume "$docker_volume" --kind disk --size "$DOCKER_DATA_SIZE"
@@ -308,7 +457,10 @@ ensure_volume "$docker_volume" --kind disk --size "$DOCKER_DATA_SIZE"
 # Pins network egress explicitly: msb's implicit default reverts to no
 # egress once any --net-rule is added. A hostname allowlist was rejected -
 # this workload's egress isn't enumerable (apt, GHCR, npm, GitHub, ...).
-# See ADR-0013.
+# `--net public` denies every private range (ADR-0013, issue #30); the
+# --allow-url rule groups after it are the only exceptions, chosen on the
+# host by whoever launches, never read from the checkout the agent edits
+# (ADR-0025).
 #
 # No --replace: this branch runs only when no runtime exists, and a bare
 # launch never destroys one (ADR-0021). The entrypoint runs agent-bringup
@@ -318,6 +470,7 @@ ensure_volume "$docker_volume" --kind disk --size "$DOCKER_DATA_SIZE"
 exec msb run "$tty_flag" --name "$name" --label "repo=$(repo_name)" \
   --memory "$memory" --cpus "$cpus" --max-memory "$max_memory" \
   --net public \
+  "${net_rules[@]}" \
   "${secrets[@]}" \
   "${violation_flag[@]}" \
   --mount-named "${docker_volume}:/var/lib/containerd:kind=disk,size=${DOCKER_DATA_SIZE}" \

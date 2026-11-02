@@ -23,6 +23,26 @@ Both ship through a personal Homebrew tap (`brew install afrossard/tap/agent-run
 `brew upgrade` delivers new releases, each carrying its release-please-stamped agent image pin.
 Run either from inside any repo's checkout to create or resume a runtime anchored to that repo.
 
+## Reaching a LAN service from the agent runtime
+
+The runtime reaches the public internet and nothing on your local network (ADR-0013, issue #30).
+To let it reach one service on your LAN, pass its URL when the runtime is created:
+
+```sh
+launch-agent-runtime --allow-url https://homeassistant.home.example
+launch-agent-runtime --allow-url http://192.168.1.20:8080 --allow-url https://nas.lan
+```
+
+- The whole host and port is reachable, not just the URL's path; the port is the URL's own, else 80 or 443 for `http` or `https`.
+- One port per host: a second `--allow-url` resolving to an address already allowed is refused.
+- LAN addresses only (10/8, 172.16/12, 192.168/16, and 100.64/10 for Tailscale): public addresses are already reachable, and loopback or link-local ones are refused.
+- The host is resolved on your machine, so names your router or split-horizon DNS provides work, and the name resolves inside the runtime too.
+- The exception is fixed when the runtime is created: to add, change, or follow a moved address, run `launch-agent-runtime --reset` and launch again with the new set.
+  Passing `--allow-url` to an existing runtime warns instead.
+- It is chosen on the host by whoever launches, never read from the checkout the agent edits.
+
+ADR-0025 records why the forwarded msb rule has the shape it does.
+
 ## Upgrading in place
 
 Only the Debian release and the default Node major are pinned; every other tool floats, and an image carries whatever was newest when it was built (ADR-0024).
