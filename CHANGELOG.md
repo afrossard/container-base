@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.0.1](https://github.com/afrossard/container-base/compare/5.0.0...5.0.1) (2026-11-08)
+
+
+### Bug Fixes
+
+* **agent:** filter the /proc/modules grep noise from bringup ([#244](https://github.com/afrossard/container-base/issues/244)) ([b60b171](https://github.com/afrossard/container-base/commit/b60b171619cf206dc2dcd1e2f91723bcd48b946f)), closes [#233](https://github.com/afrossard/container-base/issues/233)
+
 ## [5.0.0](https://github.com/afrossard/container-base/compare/4.0.4...5.0.0) (2026-11-02)
 
 
