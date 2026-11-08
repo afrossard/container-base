@@ -33,7 +33,9 @@ teardown_file() {
 }
 
 setup() {
-  [ -n "${LIVE_SKIP:-}" ] && skip "$LIVE_SKIP"
+  if [ -n "${LIVE_SKIP:-}" ]; then
+    skip "$LIVE_SKIP"
+  fi
 }
 
 exec_in() {
@@ -85,6 +87,9 @@ exec_in() {
 
   run exec_in agent-bringup
   [ "$status" -eq 0 ]
+  # Regression (issue #233): docker-init.sh greps /proc/modules, which only
+  # msb's guest kernel lacks, so CI's agent suite can't catch this leaking.
+  [[ "$output" != *"grep:"* ]]
 
   run exec_in docker info
   [ "$status" -eq 0 ]
