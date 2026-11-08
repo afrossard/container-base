@@ -43,6 +43,11 @@ exec_in() {
 }
 
 @test "a marker on the rootfs survives stop then start, and bringup restores dockerd" {
+  # Pull first: `msb run` pulls an uncached image before the sandbox exists,
+  # which can outlast the wait for the agent below.
+  run msb pull "$MSB_LIVE_IMAGE"
+  [ "$status" -eq 0 ]
+
   # Create. `sleep` keeps the runtime up; the entrypoint still runs
   # agent-bringup first, so this is a real first boot.
   msb run --no-tty --name "$LIVE_NAME" --net public \
