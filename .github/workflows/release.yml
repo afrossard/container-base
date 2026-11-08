@@ -12,10 +12,19 @@ permissions:
 
 jobs:
   release-please:
+    # Queued, never cancelled: a cancelled run could strand a release it was
+    # cutting. A run that read a stale tree is always followed by a run at
+    # least as new as the push that outdated it, and always-update makes that
+    # run rewrite the release PR
+    # (https://github.com/googleapis/release-please/issues/2890).
+    concurrency:
+      group: release-please
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       version: ${{ steps.release.outputs.version }}
+      sha: ${{ steps.release.outputs.sha }}
     steps:
       # continue-on-error + the guard below work around
       # https://github.com/googleapis/release-please-action/issues/1203:
@@ -42,7 +51,11 @@ jobs:
     env:
       IMAGE: ghcr.io/afrossard/container-base:${{ needs.release-please.outputs.version }}-dev
     steps:
+      # The release commit, not github.sha: the queue can replace the run for
+      # the release merge with a newer push's run, which then cuts the release.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.sha }}
 
       - uses: ./.github/actions/setup
 
@@ -71,6 +84,8 @@ jobs:
       IMAGE: ghcr.io/afrossard/container-base:${{ needs.release-please.outputs.version }}-agent
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.sha }}
 
       - uses: ./.github/actions/setup
 

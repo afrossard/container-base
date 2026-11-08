@@ -13,6 +13,13 @@ GitHub gates any push touching `.github/workflows/` behind a `workflow` PAT scop
 This has blocked an agent session's push twice.
 The resolution both times: post the diff to the issue, then have a more-privileged session or a human apply, commit, and push it.
 
+## A `release PR guard` failure means release-please reverted a merged change
+
+release-please can write files from a tree it read before `main` moved, on top of the newer `main` (googleapis/release-please#2890).
+The release PR then reverts whatever that merge changed, and git sees no conflict.
+Never merge a release PR while this check is failing or hasn't run (a bot-pushed head can sit at `action_required` until its CI is approved), and don't fix the release branch by hand.
+Run `gh workflow run release.yml`: `always-update` makes it regenerate every file from current `main` and force-push the release branch.
+
 ## `npm run test:dev` has real, expected failures when run nested inside this repo's own workspace devcontainer
 
 `test/dev/dotfiles-bootstrap.bats` and one `mise install` case in `test/dev/dev.bats` are unreliable when run from inside this repo's own `.devcontainer` - not a regression.
