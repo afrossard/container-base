@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.0.2](https://github.com/afrossard/container-base/compare/5.0.1...5.0.2) (2026-11-09)
+
+
+### Bug Fixes
+
+* **agent:** name failed bringup steps and always reach the shell ([#252](https://github.com/afrossard/container-base/issues/252)) ([5c09cf2](https://github.com/afrossard/container-base/commit/5c09cf23b095c211de125e7ee8edebae203483ee)), closes [#225](https://github.com/afrossard/container-base/issues/225)
+* **agent:** register tini as a subreaper to silence its msb warning ([#249](https://github.com/afrossard/container-base/issues/249)) ([2a51280](https://github.com/afrossard/container-base/commit/2a51280c27b9d5182c593fbbfaa2c10f027e39a4)), closes [#245](https://github.com/afrossard/container-base/issues/245)
+
 ## [5.0.1](https://github.com/afrossard/container-base/compare/5.0.0...5.0.1) (2026-11-08)
 
 
