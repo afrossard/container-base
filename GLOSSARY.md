@@ -42,7 +42,7 @@ _Avoid_: runtime dependency - nothing here runs at consumer runtime; the distinc
 
 **Pinned**:
 A shipped dependency whose version this repo declares, so Renovate bumps it and it changes only through an image release.
-Only the platform and the language runtimes are pinned: the base distribution release and the default language runtime.
+Only the platform, the language runtimes and the devcontainer features are pinned: the base distribution release, the default language runtime, and the features the images build with.
 _Avoid_: locked - that names a lockfile mechanism, not the policy.
 
 **Floating**:

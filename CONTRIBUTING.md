@@ -57,6 +57,10 @@ Everything else Renovate touches - GitHub Actions, npm tooling, the `.devcontain
 
 Renovate reverts a hand-edited PR title to its own generated one, so an escalation happens in the squash commit subject at merge time instead - Renovate can never emit a breaking marker itself (`semanticCommitType` is only the bare type word).
 
+Renovate is self-hosted by `.github/workflows/renovate.yml` and configured by `.github/renovate-global.json` (ADR-0027).
+Its `RENOVATE_TOKEN` secret is a fine-grained PAT with read and write access to Commit statuses, Contents, Issues, Pull requests and Workflows, and read access to Dependabot alerts and Metadata.
+Devcontainer feature pins name a full version, and Renovate reruns `devcontainer upgrade` to regenerate each `devcontainer-lock.json`, so change a pin by hand the same way or `--frozen-lockfile` fails.
+
 **Merge procedure**, for a human or an agent asked to review and merge a Renovate PR:
 
 1. Green CI and a `chore(deps)`, or a non-major `fix(deps)`/`feat(deps)`: merge with the generated title, as-is.
