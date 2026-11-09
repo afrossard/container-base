@@ -70,6 +70,12 @@ exec_in() {
   run exec_in docker info
   [ "$status" -eq 0 ]
 
+  # Regression (issue #245): tini only warns when it isn't PID 1, which only
+  # msb's guest does to it, so CI's agent suite can't catch this leaking.
+  run msb logs "$LIVE_NAME"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Tini is not running as PID 1"* ]]
+
   run msb stop "$LIVE_NAME"
   [ "$status" -eq 0 ]
 

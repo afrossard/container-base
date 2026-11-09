@@ -11,8 +11,8 @@ FROM ghcr.io/afrossard/container-base:${BASE_VERSION}-dev
 USER root
 
 # The docker-in-docker feature (images/agent/devcontainer.json) installs the
-# engine; this Containerfile only adds tini, which the entrypoint needs as
-# PID 1 to reap dockerd's orphaned children.
+# engine; this Containerfile only adds tini, which the entrypoint needs to
+# reap dockerd's orphaned children.
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tini \
     && rm -rf /var/lib/apt/lists/*
@@ -29,7 +29,9 @@ COPY ensure-workspace /usr/local/bin/ensure-workspace
 COPY ensure-tooling /usr/local/bin/ensure-tooling
 RUN chmod 0755 /usr/local/bin/agent-entrypoint /usr/local/bin/agent-bringup /usr/local/bin/ensure-workspace /usr/local/bin/ensure-tooling
 
-# tini as PID 1 reaps dockerd's children; the entrypoint delegates dockerd
-# startup to the feature's docker-init.sh and drops the command to non-root.
+# tini reaps dockerd's children: as PID 1 under docker run, and as a child of
+# /init.krun under msb, where only -s (subreaper) re-parents orphans to it and
+# stops its warning (issue #245). The entrypoint delegates dockerd startup to
+# the feature's docker-init.sh and drops the command to non-root.
 # No default command (docs/research/0022).
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint"]
+ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/usr/local/bin/agent-entrypoint"]
