@@ -36,7 +36,14 @@ case "$1" in
   rm) printf '%s\n' "$@" >> "${MSB_RM_FILE:-/dev/null}" ;;
   volume) printf '%s\n' "$@" >> "${MSB_VOLUME_FILE:-/dev/null}" ;;
   start) printf '%s\n' "$@" >> "${MSB_START_FILE:-/dev/null}" ;;
-  exec) printf '%s\n' "$@" >> "${MSB_EXEC_FILE:-/dev/null}" ;;
+  exec)
+    printf '%s\n' "$@" >> "${MSB_EXEC_FILE:-/dev/null}"
+    # An exec whose command line contains STUB_EXEC_FAIL exits non-zero,
+    # standing in for a guest command that failed.
+    if [ -n "${STUB_EXEC_FAIL:-}" ]; then
+      case "$*" in *"$STUB_EXEC_FAIL"*) exit 1 ;; esac
+    fi
+    ;;
   run) printf '%s\n' "$@" > "${MSB_ARGS_FILE:-/dev/null}" ;;
   *)
     echo "msb stub: unexpected subcommand: $1" >&2

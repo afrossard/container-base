@@ -17,14 +17,18 @@ if [ "$#" -eq 0 ]; then
 fi
 
 # Converge: docker daemon, dotfiles bootstrap, workspace clone.
-agent-bringup
+agent-bringup || echo "agent-entrypoint: continuing despite the failures above, so there is still a shell to debug in (ADR-0026)" >&2
 
-# Hand off from inside the workspace, as the working user. agent-bringup has
-# just ensured the clone exists; fall back to the home directory if no
-# workspace URL was configured.
+# Hand off from inside the workspace, as the working user; fall back to the
+# home directory if no workspace URL was configured or the clone failed.
 repo_dir="/home/$runtime_user"
 if [ -n "${WORKSPACE_CLONE_URL:-}" ]; then
-  repo_dir="/home/$runtime_user/git/$(basename "$WORKSPACE_CLONE_URL" .git)"
+  workspace_dir="/home/$runtime_user/git/$(basename "$WORKSPACE_CLONE_URL" .git)"
+  if [ -d "$workspace_dir" ]; then
+    repo_dir="$workspace_dir"
+  else
+    echo "agent-entrypoint: WARNING: $workspace_dir is missing; starting in $repo_dir instead" >&2
+  fi
 fi
 cd "$repo_dir"
 

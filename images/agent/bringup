@@ -1,7 +1,9 @@
 #!/bin/sh
 # Converges an agent runtime to a working state: docker daemon up, the
 # operator's dotfiles applied, the workspace and tooling clones present.
-# Idempotent and safe to re-run.
+# Idempotent and safe to re-run. A failed step never stops the steps after
+# it: each failure is warned about, the run ends with a summary, and the
+# exit status is non-zero (ADR-0026).
 #
 # `msb start` re-runs neither the image entrypoint nor any registered boot
 # script (verified on issue #144), so this is the runtime's single
@@ -12,6 +14,37 @@
 set -eu
 
 runtime_user=vscode
+failed_steps=""
+
+# Runs one step, recording a failure instead of aborting on it. A step runs
+# on the left of `||`, so set -e is off inside it.
+converge() {
+  description=$1
+  shift
+  "$@" || {
+    echo "agent-bringup: WARNING: could not $description (exit status $?)" >&2
+    failed_steps="${failed_steps}  - ${description}
+"
+  }
+}
+
+# Giving docker-init.sh "true" runs its full setup and returns. It gives up
+# on dockerd silently and still exits 0, so only a fresh `docker info` says
+# whether dockerd came up. The log is under /var/log, not /tmp: docker-init.sh
+# remounts /tmp as a fresh tmpfs when it isn't already a mountpoint.
+start_dockerd() {
+  /usr/local/share/docker-init.sh true 2>/var/log/docker-init.stderr.log || true
+  grep -v -e '^echo: write error: Invalid argument$' \
+    -e '^grep: /proc/modules: No such file or directory$' \
+    /var/log/docker-init.stderr.log >&2 || true
+
+  docker info >/dev/null 2>&1 && return 0
+
+  # Unfiltered: not every startup failure is logged with level=error.
+  echo "agent-bringup: dockerd did not start; last lines of /tmp/dockerd.log:" >&2
+  tail -n 20 /tmp/dockerd.log 2>&1 | sed 's/^/dockerd: /' >&2
+  return 1
+}
 
 # 1. Docker daemon. dockerd is this runtime's own (ADR-0013) and nothing
 #    restarts it after `msb start`, so bring it up whenever it is down.
@@ -28,28 +61,33 @@ if ! docker info >/dev/null 2>&1; then
   # plain `apt-get upgrade` in a live guest swaps containerd-shim-runc-v2
   # and breaks `docker run` for the rest of the boot (issue #66). The hold
   # is on disk and survives a resume, but reasserting it costs nothing.
-  apt-mark hold docker-ce docker-ce-cli containerd.io >/dev/null
+  converge "hold the docker engine packages" \
+    apt-mark hold docker-ce docker-ce-cli containerd.io >/dev/null
 
-  # Giving docker-init.sh "true" runs its full setup, confirms dockerd is
-  # up, and returns. The log is under /var/log, not /tmp: docker-init.sh
-  # remounts /tmp as a fresh tmpfs when it isn't already a mountpoint.
-  /usr/local/share/docker-init.sh true 2>/var/log/docker-init.stderr.log
-  grep -v -e '^echo: write error: Invalid argument$' \
-    -e '^grep: /proc/modules: No such file or directory$' \
-    /var/log/docker-init.stderr.log >&2 || true
+  converge "start the docker daemon" start_dockerd
 fi
 
 # 2. Dotfiles bootstrap (ADR-0016): idempotent, and a no-op with
 #    DOTFILES_REPO unset. Runs on every attach so dotfile updates still
 #    reach a long-lived runtime.
-runuser -u "$runtime_user" -- dotfiles-bootstrap
+converge "apply the dotfiles" runuser -u "$runtime_user" -- dotfiles-bootstrap
 
 # 3. Workspace clone: present after the first boot, so a no-op on a resume,
 #    and a no-op with WORKSPACE_CLONE_URL unset (a bare `docker run` of the
 #    image, as the agent image test suite does).
-runuser -u "$runtime_user" -- ensure-workspace
+converge "clone the workspace" runuser -u "$runtime_user" -- ensure-workspace
 
 # 4. Tooling clone (issue #172): present after the first boot, same shape
 #    as the workspace clone. In this repo's own runtime the two land at
 #    the same path; whichever step runs first clones it, the other no-ops.
-runuser -u "$runtime_user" -- ensure-tooling
+converge "clone the tooling repo" runuser -u "$runtime_user" -- ensure-tooling
+
+# Last, so the step output above doesn't scroll it away.
+if [ -n "$failed_steps" ]; then
+  {
+    echo "agent-bringup: WARNING: this runtime is only partly set up. Failed:"
+    printf '%s' "$failed_steps"
+    echo "agent-bringup: fix the cause, then re-run: sudo agent-bringup"
+  } >&2
+  exit 1
+fi

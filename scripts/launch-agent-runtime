@@ -398,16 +398,22 @@ wait_for_agent() {
 # Two `msb exec` calls, so the launcher stays agnostic of agent-bringup's
 # logic - the devcontainer post-start shape (ADR-0021). A resume needs this
 # because `msb start` re-runs nothing (issue #144). A failed convergence
-# warns rather than aborts: the operator still gets a shell to debug in.
+# warns rather than aborts: the operator still gets a shell to debug in
+# (ADR-0026), in the home directory if the workspace clone never landed.
 attach_to_runtime() {
+  local workdir="$workspace_dir"
   wait_for_agent || exit 1
   msb exec --no-tty "$name" -- agent-bringup >&2 \
     || echo "launch-agent-runtime: agent-bringup reported a failure; the runtime may be under-provisioned" >&2
+  if ! msb exec --no-tty "$name" -- test -d "$workspace_dir" >/dev/null 2>&1; then
+    echo "launch-agent-runtime: WARNING: $workspace_dir is missing; opening in /home/vscode instead" >&2
+    workdir=/home/vscode
+  fi
   # Last before the handover, so bring-up output doesn't scroll it away.
   if [ "${#allow_endpoints[@]}" -gt 0 ]; then
     echo "launch-agent-runtime: --allow-url is not applied: '$name' keeps the network policy it was created with, and msb can't change it; run with --reset, then launch again with --allow-url" >&2
   fi
-  exec msb exec "$tty_flag" -u vscode -w "$workspace_dir" "$name" -- "$@"
+  exec msb exec "$tty_flag" -u vscode -w "$workdir" "$name" -- "$@"
 }
 
 if sandbox_is_running "$name"; then
