@@ -259,6 +259,24 @@ reset_bare() {
   [ ! -f "$MSB_ARGS_FILE" ]
 }
 
+@test "a failed agent-bringup warns and still hands over in the workspace" {
+  export STUB_ALL="test-session" STUB_RUNNING="test-session"
+  export STUB_EXEC_FAIL="-- agent-bringup"
+  run launch
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"agent-bringup reported a failure"* ]]
+  grep -A1 -Fx -- "-w" "$MSB_EXEC_FILE" | grep -Fxq "/home/vscode/git/repo"
+}
+
+@test "a missing workspace clone warns and hands over in the home directory" {
+  export STUB_ALL="test-session" STUB_RUNNING="test-session"
+  export STUB_EXEC_FAIL="-- test -d /home/vscode/git/repo"
+  run launch
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"/home/vscode/git/repo is missing"* ]]
+  grep -A1 -Fx -- "-w" "$MSB_EXEC_FILE" | grep -Fxq "/home/vscode"
+}
+
 @test "attach converges the runtime with agent-bringup before handing over" {
   export STUB_ALL="test-session" STUB_RUNNING="test-session"
   run launch

@@ -46,6 +46,39 @@ teardown() {
   [[ "$output" != *"grep:"* ]]
 }
 
+# Issue #225: an invalid daemon.json is a real dockerd startup failure, whose
+# reason exists only in dockerd's own log.
+@test "agent-bringup prints dockerd's own error and exits non-zero when dockerd fails to start" {
+  printf '{ not json' >"$BATS_TEST_TMPDIR/daemon.json"
+  run docker run --rm --privileged -v "${volume}:/var/lib/containerd" \
+    -v "$BATS_TEST_TMPDIR/daemon.json:/etc/docker/daemon.json:ro" \
+    --entrypoint agent-bringup "$IMAGE"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"dockerd: unable to configure the Docker daemon"* ]]
+  [[ "$output" == *"  - start the docker daemon"* ]]
+  # A failed step doesn't stop the ones after it.
+  [[ "$output" == *"ensure-tooling:"* ]]
+}
+
+@test "the given command still runs, with a warning, when dockerd fails to start" {
+  printf '{ not json' >"$BATS_TEST_TMPDIR/daemon.json"
+  run docker run --rm --privileged -v "${volume}:/var/lib/containerd" \
+    -v "$BATS_TEST_TMPDIR/daemon.json:/etc/docker/daemon.json:ro" \
+    "$IMAGE" sh -c 'echo "reached-as-$(id -un)"'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"  - start the docker daemon"* ]]
+  [[ "$output" == *"reached-as-vscode"* ]]
+}
+
+@test "the given command runs in the home directory, with a warning, when the workspace clone fails" {
+  run docker run --rm --privileged -v "${volume}:/var/lib/containerd" \
+    -e WORKSPACE_CLONE_URL=file:///nonexistent/repo.git "$IMAGE" pwd
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"  - clone the workspace"* ]]
+  [[ "$output" == *"/home/vscode/git/repo is missing"* ]]
+  [ "${lines[-1]}" = "/home/vscode" ]
+}
+
 @test "the given command runs as vscode, not root, and can reach the docker socket without sudo" {
   run docker run --rm --privileged -v "${volume}:/var/lib/containerd" "$IMAGE" id
   [ "$status" -eq 0 ]
