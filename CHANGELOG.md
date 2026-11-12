@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.1.0](https://github.com/afrossard/container-base/compare/5.0.3...5.1.0) (2026-11-12)
+
+
+### Features
+
+* pin the agent image by digest in the released launcher ([#267](https://github.com/afrossard/container-base/issues/267)) ([ff54ed4](https://github.com/afrossard/container-base/commit/ff54ed46f00f6474806559895c02660b4d5cc7c4))
+
 ## [5.0.3](https://github.com/afrossard/container-base/compare/5.0.2...5.0.3) (2026-11-12)
 
 
