@@ -6,6 +6,16 @@
   "devcontainer": {
     "managerFilePatterns": ["/^images/[^/]+/devcontainer\\.json$/"]
   },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The zizmor version the zizmor workflow runs",
+      "managerFilePatterns": ["/^\\.github/workflows/zizmor\\.yml$/"],
+      "matchStrings": ["\\n\\s+version: (?<currentValue>\\d+\\.\\d+\\.\\d+)\\n"],
+      "depNameTemplate": "zizmor",
+      "datasourceTemplate": "pypi"
+    }
+  ],
   "packageRules": [
     {
       "matchManagers": ["devcontainer"],
