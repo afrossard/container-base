@@ -18,9 +18,10 @@ A `postUpgradeTasks` entry runs the generator that owns the lock, and the lock l
 
 ## Consequences
 
-- The workflow needs a `RENOVATE_TOKEN` secret, because pushes made with `GITHUB_TOKEN` do not trigger CI on the PRs Renovate opens.
+- The workflow authenticates as a dedicated GitHub App and mints a one-hour installation token on each run, because pushes made with `GITHUB_TOKEN` do not trigger CI on the PRs Renovate opens.
+- An App rather than a personal access token, because the App's key never expires and its PRs come from its own bot user rather than the operator.
 - Only one Renovate may run against this repo, so the Mend app must be turned off for it when this lands.
-- PRs and the Dependency Dashboard belong to the token's user, so PRs and the dashboard issue left by the app are not adopted and need closing.
+- PRs and the Dependency Dashboard belong to the App's bot user, so PRs and the dashboard issue left by the Mend app are not adopted and need closing.
 - A ticked dashboard checkbox takes effect on the next scheduled run, or on a manual `workflow_dispatch`, because nothing delivers the app's webhook any more.
 - Devcontainer features join the pinned set, which ADR-0024 limited to the platform and the language runtimes. They could never float: `--frozen-lockfile` builds already held each one at the exact version in its lock, and this makes that pin visible.
 - With full-version pins, every upstream feature release that changes `images/**` computes a release of ours. For features this accepts the release cascade ADR-0024 removed for uv, because the alternative is dropping the locks.
