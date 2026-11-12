@@ -2,7 +2,22 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", "helpers:pinGitHubActionDigestsToSemver"],
   "semanticCommits": "enabled",
+  "devcontainer": {
+    "managerFilePatterns": ["/^images/[^/]+/devcontainer\\.json$/"]
+  },
   "packageRules": [
+    {
+      "matchManagers": ["devcontainer"],
+      "postUpgradeTasks": {
+        "commands": [
+          "npm ci --ignore-scripts",
+          "npx devcontainer upgrade --workspace-folder . --config {{{packageFile}}}"
+        ],
+        "fileFilters": ["**/devcontainer-lock.json"],
+        "executionMode": "update",
+        "installTools": { "node": {} }
+      }
+    },
     {
       "matchFileNames": ["images/**"],
       "semanticCommitType": "fix"

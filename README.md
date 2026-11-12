@@ -45,7 +45,7 @@ ADR-0025 records why the forwarded msb rule has the shape it does.
 
 ## Upgrading in place
 
-Only the Debian release and the default Node major are pinned; every other tool floats, and an image carries whatever was newest when it was built (ADR-0024).
+Only the Debian release, the default Node major and the devcontainer features the images build with are pinned; every other tool floats, and an image carries whatever was newest when it was built (ADR-0024).
 `/etc/mise/config.toml` declares all of it, so one command brings a running environment current:
 
 | Where                                | Command                                             | What it does                                                                                |

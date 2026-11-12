@@ -1,0 +1,12 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-global-schema.json",
+  "platform": "github",
+  "binarySource": "install",
+  "onboarding": false,
+  "requireConfig": "required",
+  "repositories": ["afrossard/container-base"],
+  "allowedCommands": [
+    "^npm ci --ignore-scripts$",
+    "^npx devcontainer upgrade --workspace-folder \\. --config (\\.devcontainer|images/[^/ ]+)/devcontainer\\.json$"
+  ]
+}

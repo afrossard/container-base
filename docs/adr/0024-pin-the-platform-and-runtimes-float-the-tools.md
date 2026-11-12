@@ -7,7 +7,7 @@ uv was the only tool driving that cascade; claude-code, gh, starship and dive al
 
 **Decision: only the platform and the language runtimes are pinned; every tool and language manager floats, and one mise command brings all of them current in place.**
 
-- **Pinned**: the `debian:trixie-slim` release and the default Node major (ADR-0020). Renovate bumps them and they change only through an image release.
+- **Pinned**: the `debian:trixie-slim` release and the default Node major (ADR-0020). Renovate bumps them and they change only through an image release. ADR-0027 adds the devcontainer features the images build with to this set.
 - **Floating**: everything else. No version is declared in this repo; the image carries whatever its install source offered at build time, as a floor, and every build also runs a full Debian upgrade so the base layer is current trixie.
 - **One declaration**: the shipped mise system config, `/etc/mise/config.toml`, lists the Node pin, every floating mise tool under `[tools]`, every floating apt package under `[bootstrap.packages]`, Anthropic's apt repository and its key fingerprint under `[bootstrap.apt.sources]`, and a `bootstrap` task running `apt-get full-upgrade`. The build installs from it with `mise bootstrap --yes`; the Containerfile keeps only the sources mise cannot declare (the mise extrepo, since mise must be installed to read the config, and the Homebrew installer) and what adding them takes (`ca-certificates`, `curl`, `extrepo`).
 - **One upgrade command**: `mise bootstrap --upgrade`, run by hand. It is never run automatically on attach or start, because bringup is fast, idempotent convergence (ADR-0021) and an upgrade is neither.
