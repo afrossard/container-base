@@ -7,11 +7,15 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   release-please:
+    # Write access only where release-please needs it, to tag, release, and
+    # maintain the release PR; the publish jobs set their own.
+    permissions:
+      contents: write
+      pull-requests: write
     # Queued, never cancelled: a cancelled run could strand a release it was
     # cutting. A run that read a stale tree is always followed by a run at
     # least as new as the push that outdated it, and always-update makes that

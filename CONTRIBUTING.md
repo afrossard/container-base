@@ -59,6 +59,7 @@ Renovate reverts a hand-edited PR title to its own generated one, so an escalati
 
 Renovate is self-hosted by `.github/workflows/renovate.yml` and configured by `.github/renovate-global.json` (ADR-0027).
 It authenticates as a dedicated GitHub App, installed on this repo with webhooks off, read and write access to Checks, Commit statuses, Contents, Issues, Pull requests and Workflows, and read access to Administration, Dependabot alerts and Metadata.
+`renovate.yml` requests exactly these permissions for its token, so change both together.
 The App's client ID is in `vars.RENOVATE_APP_CLIENT_ID` and its private key in `secrets.RENOVATE_APP_PRIVATE_KEY`.
 Devcontainer feature pins name a full version, and Renovate reruns `devcontainer upgrade` to regenerate each `devcontainer-lock.json`, so change a pin by hand the same way or `--frozen-lockfile` fails.
 
