@@ -35,10 +35,11 @@ Doc-only fixes a maintainer applies directly are the only exception drawn so far
 
 ## Merging a PR
 
-`gh pr merge <number> --squash --subject "<PR title>" --delete-branch` - squash merge, then delete the remote and local branch.
+`gh pr merge <number> --squash --delete-branch` - squash merge, then delete the remote and local branch.
 Confirmed preference as of 2026-07-24, superseding the merge-commit history on earlier PRs (#10, #11).
 
-`--subject` is not optional: GitHub's squash-merge default uses the PR title only when the PR has more than one commit; a single-commit PR (every Renovate PR, many small human ones) defaults to that commit's own message, silently dropping the Conventional Commits prefix release-please needs (confirmed by PR #98 vs #85/#91).
+Squash is the only merge method, and the repo setting makes the commit title the PR title and the commit body empty, so no `--subject` or `--body` is needed (issue #251).
+Pass `--subject` only to change the title on purpose, such as escalating a Renovate PR to a breaking change.
 
 ## When a skill says "publish to the issue tracker"
 

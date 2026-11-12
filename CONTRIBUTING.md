@@ -6,7 +6,8 @@ Every commit that lands on `main` must follow [Conventional Commits](https://www
 Releases are cut automatically by release-please (ADR-0018), and the commit type is what computes the version bump, so this is load-bearing, not cosmetic.
 
 This repo squash-merges pull requests, so **the PR title becomes the commit message** - write the PR title in the same format.
-That only happens because docs/agents/issue-tracker.md's merge convention passes the PR title explicitly via `--subject`; GitHub's own squash-merge default silently drops it for any single-commit PR.
+The repo's squash-merge setting takes the commit title from the PR title and leaves the commit body empty, so release-please reads nothing but the title.
+A body copied from the PR would carry text such as the upstream release notes Renovate embeds, where a stray `BREAKING CHANGE:` line would cut a major release.
 
 | Type                                              | Effect on the next release |
 | ------------------------------------------------- | -------------------------- |
@@ -66,7 +67,7 @@ Devcontainer feature pins name a full version, and Renovate reruns `devcontainer
 **Merge procedure**, for a human or an agent asked to review and merge a Renovate PR:
 
 1. Green CI and a `chore(deps)`, or a non-major `fix(deps)`/`feat(deps)`: merge with the generated title, as-is.
-2. Green CI and a shipped-dependency (`images/**`) **major**: read the diff and judge whether it's actually breaking for a consumer - a changed default, a removed flag a consumer script relies on - not just "the version number jumped." Not breaking: merge as-is. Breaking: don't merge on the generated title; rewrite the squash commit subject to `fix(deps)!: ...`/`feat(deps)!: ...` (or add a `BREAKING CHANGE:` footer) describing what breaks, via `gh pr merge --subject`.
+2. Green CI and a shipped-dependency (`images/**`) **major**: read the diff and judge whether it's actually breaking for a consumer - a changed default, a removed flag a consumer script relies on - not just "the version number jumped." Not breaking: merge as-is. Breaking: don't merge on the generated title; rewrite the squash commit subject to `fix(deps)!: ...`/`feat(deps)!: ...` (or add a `BREAKING CHANGE:` footer via `--body`) describing what breaks, via `gh pr merge --subject`.
 3. Red or pending CI: leave it open, do nothing further.
 
 **Agent autonomy boundary**: merge `fix`/`feat`/`chore` verdicts on green CI without asking.
