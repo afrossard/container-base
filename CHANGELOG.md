@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.1.1](https://github.com/afrossard/container-base/compare/5.1.0...5.1.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* name the launcher release asset so the tap's Renovate can follow it ([#273](https://github.com/afrossard/container-base/issues/273)) ([dee1a03](https://github.com/afrossard/container-base/commit/dee1a0329d5a84f4fb8348750e06640cdf0f7dae))
+
 ## [5.1.0](https://github.com/afrossard/container-base/compare/5.0.3...5.1.0) (2026-11-12)
 
 
