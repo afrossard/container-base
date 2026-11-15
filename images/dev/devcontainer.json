@@ -12,7 +12,10 @@
       "upgradePackages": true,
       "username": "vscode",
       "userUid": "1000",
-      "userGid": "1000"
+      "userGid": "1000",
+      // The Containerfile creates both groups; vscode doesn't exist until
+      // this feature runs, so it joins them here (ADR-0030).
+      "addGroups": "mise,linuxbrew"
     }
   },
   // Everything below ships to consumers through the image's

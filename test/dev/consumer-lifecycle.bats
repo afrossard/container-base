@@ -3,7 +3,8 @@
 # Opens a minimal consumer devcontainer on the real image built from
 # images/dev/ with `devcontainer up`, the door a consumer walks through, and
 # asserts the lifecycle the image ships in its devcontainer.metadata label
-# reaches it (ADR-0029). The consumer config names nothing but the image,
+# reaches it (ADR-0029), whatever uid the CLI gives vscode (ADR-0030). The
+# consumer config names nothing but the image,
 # a mount for the fixture dotfiles repo, and a postCreateCommand of its own.
 #
 # Expects IMAGE to name an already-built image (set by `npm run test:dev`).
@@ -63,6 +64,20 @@ in_consumer() {
 @test "the image's postStartCommand trusts the consumer's workspace folder" {
   run in_consumer sh -c 'git config --global --get-all safe.directory | grep -Fx "$PWD"'
   [ "$status" -eq 0 ]
+}
+
+# ADR-0030: on a Linux host whose user isn't uid 1000, `devcontainer up`
+# changes vscode's uid to match, and re-owns only $HOME. CI's runner user is
+# uid 1001, so there this proves the shared tool directories survive it.
+@test "the consumer's vscode can write the shared tool directories" {
+  run in_consumer sh -c '
+    for dir in "$MISE_DATA_DIR" "$MISE_DATA_DIR/installs" "$MISE_DATA_DIR/shims" \
+      "$HOMEBREW_PREFIX" "$HOMEBREW_PREFIX/Cellar"; do
+      [ -w "$dir" ] || echo "not writable: $dir"
+    done
+  '
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }
 
 @test "the consumer's own postCreateCommand still runs" {

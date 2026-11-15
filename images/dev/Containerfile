@@ -30,8 +30,10 @@ COPY mise/config.toml /etc/mise/config.toml
 # (baking the Node pin and the floating tools into the shared data
 # directory), and runs the `bootstrap` task, whose full upgrade brings the
 # base layer current. It runs as root here, so the data directory is
-# chowned to vscode after (ADR-0008), and root's caches and state - gh's
-# telemetry device id among them - are dropped rather than baked.
+# chowned to vscode after (ADR-0008) and handed to the mise group, which
+# vscode joins through common-utils' addGroups and keeps when the
+# devcontainer CLI changes its uid (ADR-0030). Root's caches and state -
+# gh's telemetry device id among them - are dropped rather than baked.
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -42,7 +44,10 @@ RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mise \
     && mkdir -p "$MISE_DATA_DIR" \
     && mise bootstrap --yes \
-    && chown -R 1000:1000 "$MISE_DATA_DIR" \
+    && groupadd -r mise \
+    && chown -R 1000:mise "$MISE_DATA_DIR" \
+    && chmod -R g+rwX "$MISE_DATA_DIR" \
+    && find "$MISE_DATA_DIR" -type d -exec chmod g+s {} + \
     && rm -rf /var/lib/apt/lists/* /root/.cache /root/.local
 
 # sudo and zsh, which the edits below need, come from the shipped config's
@@ -63,7 +68,9 @@ RUN sed -i \
 # Homebrew, for parity with the Mac and the operator's own ad-hoc formulae;
 # the image declares none (ADR-0024). Its installer refuses root unless it
 # sees /.dockerenv, which a BuildKit `RUN` step doesn't create, so it is
-# faked around the install. Prefix chowned to vscode afterward. shellenv
+# faked around the install. Prefix chowned to vscode afterward, and handed
+# to the linuxbrew group the same way as mise's data directory (ADR-0030),
+# in the same step so the image carries no second copy of it. shellenv
 # goes in /etc/zsh/zshenv so non-interactive shells get it too (ADR-0010).
 # `shellenv zsh`, not bare `shellenv`: brew otherwise picks the flavour from
 # the RUN step's sh and omits the fpath line its completions need (issue #210).
@@ -73,7 +80,10 @@ ENV NONINTERACTIVE=1
 
 RUN touch /.dockerenv \
     && /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
-    && chown -R 1000:1000 "$HOMEBREW_PREFIX" \
+    && groupadd -r linuxbrew \
+    && chown -R 1000:linuxbrew "$HOMEBREW_PREFIX" \
+    && chmod -R g+rwX "$HOMEBREW_PREFIX" \
+    && find "$HOMEBREW_PREFIX" -type d -exec chmod g+s {} + \
     && rm -f /.dockerenv \
     && rm -rf /root/.cache \
     && printf '\n# Homebrew shellenv (ADR-0010)\n%s\n' \
