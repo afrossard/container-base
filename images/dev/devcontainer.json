@@ -15,5 +15,31 @@
       "userGid": "1000"
     }
   },
-  "remoteUser": "vscode"
+  // Everything below ships to consumers through the image's
+  // devcontainer.metadata label, which the devcontainer CLI merges into
+  // each consumer's own config (ADR-0029). A consumer's lifecycle commands
+  // run after these, not instead of them.
+  "remoteUser": "vscode",
+  "remoteEnv": {
+    "DOTFILES_REPO": "${localEnv:DOTFILES_REPO}"
+  },
+  "postCreateCommand": "mise trust && mise install",
+  // On every start, not on create: dotfiles ADR-0005 applies config afresh
+  // so a durable volume can't accumulate stale config (ADR-0007).
+  "postStartCommand": "git config --global --add safe.directory \"$PWD\" && dotfiles-bootstrap",
+  // Without this VS Code opens the first terminal before dotfiles-bootstrap
+  // has applied, and that terminal stays bare for its lifetime.
+  "waitFor": "postStartCommand",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "EditorConfig.EditorConfig",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-containers",
+        "eamodio.gitlens",
+        "mhutchie.git-graph",
+        "donjayamanne.githistory"
+      ]
+    }
+  }
 }
