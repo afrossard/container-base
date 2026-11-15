@@ -18,7 +18,11 @@ Whether it rehashes the fetched content locally was not tested.
 
 ## Consequences
 
-- **The tap's formula and its Renovate config change** to track the release asset rather than the tag's source tarball, in `afrossard/homebrew-tap`.
-- **A release exists briefly without its launcher asset**, between release-please creating it and the publish jobs finishing, so a formula bump that runs in that window fails until the asset lands.
+- **The tap's formula changes** to install the release asset rather than the tag's source tarball, in `afrossard/homebrew-tap`.
+- **Renovate's `homebrew` manager sets the asset's name.**
+  It tries only `releases/download/<version>/<repo>-<version>.tar.gz` and then the tag's source tarball (Renovate 44.235.3, issue #270), so the asset is `container-base-<version>.tar.gz`, whatever it contains.
+  The 5.1.0 asset keeps its earlier name `agent-runtime-5.1.0.tar.gz`, because a release asset is never replaced.
+- **Renovate falls back to the unpinned source tarball whenever the asset is missing**, including in the window between release-please creating a release and the publish jobs finishing.
+  A formula bump made in that window points at a launcher with no digest, so the tap must reject a bump to a source-tarball URL (afrossard/homebrew-tap#31).
 - **The release workflow needs `contents: write` in the job that uploads the asset**, on top of the publish jobs' `packages: write`.
 - **A replaced release asset cannot reach hosts**, because the formula's `sha256` no longer matches it, so the tag ruleset allowing `gh release upload --clobber` is no gap here.

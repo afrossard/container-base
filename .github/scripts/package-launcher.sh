@@ -39,7 +39,7 @@ fi
 staging="$(mktemp -d "$(dirname "$out")/.package-launcher.XXXXXX")"
 trap 'rm -rf "$staging"' EXIT
 
-top="agent-runtime-${version}"
+top="container-base-${version}"
 mkdir -p "$staging/$top"
 cp -Rp scripts LICENSE "$staging/$top/"
 
