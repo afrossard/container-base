@@ -135,8 +135,12 @@ jobs:
           ref: ${{ needs.release-please.outputs.sha }}
           persist-credentials: false
 
-      - run: .github/scripts/package-launcher.sh "$VERSION" "$DIGEST" "agent-runtime-${VERSION}.tar.gz"
+      # The asset name is Renovate's convention, not a description of the
+      # contents: its homebrew manager only finds a release asset named
+      # <repo>-<version>.tar.gz, and otherwise falls back to the tag's
+      # unpinned source tarball (ADR-0028).
+      - run: .github/scripts/package-launcher.sh "$VERSION" "$DIGEST" "container-base-${VERSION}.tar.gz"
 
-      - run: gh release upload "$VERSION" "agent-runtime-${VERSION}.tar.gz" --repo "$GITHUB_REPOSITORY"
+      - run: gh release upload "$VERSION" "container-base-${VERSION}.tar.gz" --repo "$GITHUB_REPOSITORY"
         env:
           GH_TOKEN: ${{ github.token }}

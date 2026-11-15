@@ -22,7 +22,7 @@ EOF
   chmod +x "$root/scripts/launch-agent-runtime" "$root/scripts/cleanup-agent-sessions"
   printf 'license\n' > "$root/LICENSE"
 
-  out="$BATS_TEST_TMPDIR/agent-runtime-1.2.3.tar.gz"
+  out="$BATS_TEST_TMPDIR/container-base-1.2.3.tar.gz"
   unpacked="$BATS_TEST_TMPDIR/unpacked"
   mkdir -p "$unpacked"
 }
@@ -38,7 +38,7 @@ unpack() {
   [ "$status" -eq 0 ]
   unpack
   grep -qxF "image=\"ghcr.io/afrossard/container-base:\${version}-agent@${digest}\"" \
-    "$unpacked/agent-runtime-1.2.3/scripts/launch-agent-runtime"
+    "$unpacked/container-base-1.2.3/scripts/launch-agent-runtime"
 }
 
 @test "packs every host-side script, executable, plus the license" {
@@ -47,10 +47,10 @@ unpack() {
 
   [ "$status" -eq 0 ]
   unpack
-  [ -x "$unpacked/agent-runtime-1.2.3/scripts/launch-agent-runtime" ]
-  [ -x "$unpacked/agent-runtime-1.2.3/scripts/cleanup-agent-sessions" ]
-  [ -f "$unpacked/agent-runtime-1.2.3/scripts/lib/agent-runtime.sh" ]
-  [ -f "$unpacked/agent-runtime-1.2.3/LICENSE" ]
+  [ -x "$unpacked/container-base-1.2.3/scripts/launch-agent-runtime" ]
+  [ -x "$unpacked/container-base-1.2.3/scripts/cleanup-agent-sessions" ]
+  [ -f "$unpacked/container-base-1.2.3/scripts/lib/agent-runtime.sh" ]
+  [ -f "$unpacked/container-base-1.2.3/LICENSE" ]
 }
 
 @test "leaves the committed launcher untouched" {
