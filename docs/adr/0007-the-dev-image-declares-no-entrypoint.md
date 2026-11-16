@@ -23,6 +23,10 @@ Enabling the setting would be a flag day that breaks five repos to fix one.
 So every consumer, devcontainer or not, calls `dotfiles-bootstrap` explicitly.
 A repo adopts the new image and its bootstrap line in the same change, and the repos behind it are untouched.
 
+**Superseded in part by ADR-0029.**
+A devcontainer no longer calls `dotfiles-bootstrap` itself: the dev image's `devcontainer.metadata` label ships the `postStartCommand` that does.
+Leaving the `dotfiles.repository` setting off, declaring no `ENTRYPOINT`, and calling the script from `postStartCommand` all stand, and a container no platform launches still calls it from its own entrypoint.
+
 ## Consequences
 
 - Migration is per repo and reversible, with no estate-wide switch to throw.

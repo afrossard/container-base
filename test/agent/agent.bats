@@ -82,7 +82,10 @@ teardown() {
 @test "the given command runs as vscode, not root, and can reach the docker socket without sudo" {
   run docker run --rm --privileged -v "${volume}:/var/lib/containerd" "$IMAGE" id
   [ "$status" -eq 0 ]
-  [[ "$output" == *"uid=1000(vscode) gid=1000(vscode) groups=1000(vscode),999(docker)"* ]]
+  [[ "$output" == *"uid=1000(vscode) gid=1000(vscode) groups="* ]]
+  # By name: the system gids are allocated in build order, and the dev
+  # image's mise and linuxbrew groups (ADR-0030) come before docker's.
+  [[ "$output" =~ [,=][0-9]+\(docker\) ]]
 }
 
 @test "no command given fails rather than falling back to a default" {

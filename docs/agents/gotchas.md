@@ -22,7 +22,7 @@ Run `gh workflow run release.yml`: `always-update` makes it regenerate every fil
 
 ## `npm run test:dev` has real, expected failures when run nested inside this repo's own workspace devcontainer
 
-`test/dev/dotfiles-bootstrap.bats` and one `mise install` case in `test/dev/dev.bats` are unreliable when run from inside this repo's own `.devcontainer` - not a regression.
+`test/dev/dotfiles-bootstrap.bats`, `test/dev/consumer-lifecycle.bats` and one `mise install` case in `test/dev/dev.bats` are unreliable when run from inside this repo's own `.devcontainer` - not a regression.
 `docker-outside-of-docker` drives the _host_ daemon, so a `docker run -v` from a container-local tmp path doesn't resolve there.
 CI runs the suite unnested and is the authoritative signal; reproduce a failure in CI or a non-nested shell before chasing it.
 

@@ -89,10 +89,35 @@ $shims/node"
   [[ "$output" == *"uv@latest"* ]]
 }
 
-@test "mise's data directory is vscode-owned" {
+@test "mise's data directory is vscode-owned, in the mise group" {
   run docker run --rm "$IMAGE" stat -c '%U:%G' /usr/local/share/mise
   [ "$status" -eq 0 ]
-  [ "$output" = "vscode:vscode" ]
+  [ "$output" = "vscode:mise" ]
+}
+
+# ADR-0030: the devcontainer CLI may change vscode's uid and its own group's
+# gid to match the host, and re-owns only $HOME. Membership in a dedicated
+# group, which neither change touches, keeps the shared tool directories
+# writable. test/dev/consumer-lifecycle.bats exercises the change itself.
+@test "vscode is a member of the mise and linuxbrew groups" {
+  run docker run --rm "$IMAGE" id -nG vscode
+  [ "$status" -eq 0 ]
+  [[ " $output " == *" mise "* ]]
+  [[ " $output " == *" linuxbrew "* ]]
+}
+
+@test "every directory under the shared tool directories is group-writable and setgid" {
+  run docker run --rm "$IMAGE" sh -c \
+    'find /usr/local/share/mise /home/linuxbrew/.linuxbrew -type d ! -perm -2070 | head -5'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "no file under the shared tool directories lacks group write" {
+  run docker run --rm "$IMAGE" sh -c \
+    'find /usr/local/share/mise /home/linuxbrew/.linuxbrew ! -type l ! -perm -g+w | head -5'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }
 
 @test "the mise shims directory is prepended to sudo's secure_path" {
@@ -193,8 +218,8 @@ $shims/node"
     stat -c "%U:%G" /usr/local/share/mise /usr/local/share/mise/installs
   '
   [ "$status" -eq 0 ]
-  [ "$output" = "vscode:vscode
-vscode:vscode" ]
+  [ "$output" = "vscode:mise
+vscode:mise" ]
 }
 
 @test "uv can resolve and fetch a Python interpreter" {
@@ -235,10 +260,10 @@ vscode:vscode" ]
   [ -z "$output" ]
 }
 
-@test "the Homebrew prefix is vscode-owned" {
+@test "the Homebrew prefix is vscode-owned, in the linuxbrew group" {
   run docker run --rm "$IMAGE" stat -c '%U:%G' /home/linuxbrew/.linuxbrew
   [ "$status" -eq 0 ]
-  [ "$output" = "vscode:vscode" ]
+  [ "$output" = "vscode:linuxbrew" ]
 }
 
 # Scoped to shell configuration, not /home/linuxbrew: the Cellar's bundled
