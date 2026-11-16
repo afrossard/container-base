@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.2.0](https://github.com/afrossard/container-base/compare/5.1.1...5.2.0) (2026-11-16)
+
+
+### Features
+
+* ship the shared devcontainer lifecycle in the dev image's metadata ([#275](https://github.com/afrossard/container-base/issues/275)) ([9ab7fd1](https://github.com/afrossard/container-base/commit/9ab7fd1d43a509e73c15a42668afc67b35b2b997))
+
 ## [5.1.1](https://github.com/afrossard/container-base/compare/5.1.0...5.1.1) (2026-11-15)
 
 
