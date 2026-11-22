@@ -1,5 +1,0 @@
-#!/bin/sh
-set -eu
-
-git config --global --add safe.directory "$PWD"
-dotfiles-bootstrap
