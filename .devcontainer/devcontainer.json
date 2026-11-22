@@ -8,29 +8,14 @@
       "moby": false
     }
   },
-  "remoteEnv": {
-    "DOTFILES_REPO": "${localEnv:DOTFILES_REPO}"
-  },
-  "postCreateCommand": "${containerWorkspaceFolder}/.devcontainer/post-create",
-  "postStartCommand": "${containerWorkspaceFolder}/.devcontainer/post-start",
-  // Default (updateContentCommand, undefined here) lets VS Code open the
-  // first integrated terminal before dotfiles-bootstrap finishes cloning
-  // and applying - that terminal sources .zshrc before it exists and
-  // stays bare for its lifetime. postStartCommand waits for the bootstrap
-  // to complete first.
-  "waitFor": "postStartCommand",
-  "remoteUser": "vscode",
+  // The dev image ships the shared lifecycle through its
+  // devcontainer.metadata label (images/dev/devcontainer.json, ADR-0029),
+  // so the reference profile keeps only its own additions, which run after
+  // the image's.
+  "postCreateCommand": "npm ci",
   "customizations": {
     "vscode": {
-      "extensions": [
-        "EditorConfig.EditorConfig",
-        "esbenp.prettier-vscode",
-        "ms-azuretools.vscode-containers",
-        "charliermarsh.ruff",
-        "eamodio.gitlens",
-        "mhutchie.git-graph",
-        "donjayamanne.githistory"
-      ]
+      "extensions": ["charliermarsh.ruff"]
     }
   }
 }
