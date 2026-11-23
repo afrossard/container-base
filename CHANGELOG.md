@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.2.1](https://github.com/afrossard/container-base/compare/5.2.0...5.2.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **deps:** update ghcr.io/devcontainers/features/common-utils docker tag to v2.7.2 ([#294](https://github.com/afrossard/container-base/issues/294)) ([ad3cdd9](https://github.com/afrossard/container-base/commit/ad3cdd9025c0f948f712d7f032f14cccc72d8b60))
+
 ## [5.2.0](https://github.com/afrossard/container-base/compare/5.1.1...5.2.0) (2026-11-16)
 
 
